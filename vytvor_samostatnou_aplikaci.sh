@@ -93,7 +93,7 @@ ln -s /Applications "$DMGDIR/Aplikace"
 cat > "$DMGDIR/Jak nainstalovat.txt" <<TXT
 $NAME $VERSION
 
-1) Přetáhni ikonu „$NAME“ na složku „Aplikace“.
+1) Přetáhni ikonu „${NAME}“ na složku „Aplikace“.
 2) Spusť aplikaci ze složky Aplikace.
 
 Pokud macOS při prvním spuštění napíše, že aplikaci nemůže ověřit:

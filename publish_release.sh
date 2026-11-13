@@ -42,7 +42,7 @@ if [ -z "$NOTES" ] && [ -f CHANGELOG.md ]; then
   NOTES=$(awk -v v="## $VER" '$0==v{f=1;next} /^## /{if(f)exit} f' CHANGELOG.md | sed '/./,$!d')
 fi
 if [ -z "$NOTES" ]; then
-  echo "CHYBA: chybí popis změn – doplň do CHANGELOG.md oddíl „## $VER“, nebo použij --notes \"…\"."
+  echo "CHYBA: chybí popis změn – doplň do CHANGELOG.md oddíl „## ${VER}“, nebo použij --notes \"…\"."
   exit 1
 fi
 
@@ -78,7 +78,7 @@ git push -q -u origin main
 cd "$SRC"
 
 # 3) vydání
-echo "› Vytvářím vydání v$VER…"
+echo "› Vytvářím vydání v${VER}…"
 gh release create "v$VER" "$DMG" --repo "$REPO" --target main \
   --title "Katalog souborů $VER" --notes "$NOTES" --latest
 echo
