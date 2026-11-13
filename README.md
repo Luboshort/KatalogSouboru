@@ -13,13 +13,23 @@ Pro Macy s procesorem Apple (M1 a novější), macOS 26 Tahoe.
 
 ## Instalace
 
-1. Na stránce [Releases](https://github.com/Luboshort/KatalogSouboru/releases) stáhni nejnovější `KatalogSouboru-<verze>.dmg`.
-2. Otevři DMG a přetáhni `KatalogSouboru` do složky Aplikace.
-3. Při prvním spuštění macOS napíše, že aplikaci nemůže ověřit: klikni na „Hotovo“, otevři **Nastavení systému → Soukromí a zabezpečení**, sjeď dolů a klikni na **Přesto otevřít**. Stačí jednou.
+Otevři **Terminál** a vlož tento příkaz:
+
+```
+curl -fsSL https://raw.githubusercontent.com/Luboshort/KatalogSouboru/main/install.sh | bash
+```
+
+Stáhne nejnovější verzi, nainstaluje ji do složky Aplikace (bez práv správce do `~/Applications`) a spustí.
+
+Proč ne stažením DMG v prohlížeči: soubor stažený prohlížečem dostane od macOS značku „staženo z internetu“
+a aplikace bez placeného podpisu Apple se pak zablokuje s varováním o možném malwaru. Na firemních Macech
+ji často nejde ani povolit. Soubor stažený z Terminálu tuto značku nedostane.
 
 ## Aktualizace
 
-Aplikace při spuštění (a pak jednou denně) zkontroluje GitHub. Když je k dispozici nová verze, nahoře v okně se objeví žlutý pruh s tlačítkem **Stáhnout**. Ručně: tlačítko **Zkontrolovat aktualizace** vpravo ve spodní liště okna.
+Aplikace při spuštění (a pak jednou denně) zkontroluje GitHub. Když je k dispozici nová verze, nahoře v okně
+se objeví žlutý pruh s tlačítkem **Nainstalovat a restartovat** – aplikace si novou verzi stáhne, ověří,
+vymění se a znovu spustí. Ručně: **Zkontrolovat aktualizace** vpravo ve spodní liště okna.
 
 ## Sestavení ze zdrojových kódů
 
@@ -53,5 +63,6 @@ Aplikace porovnává číslo verze z tagu vydání s vlastním `APP_VERSION` a n
 | `vytvor_samostatnou_aplikaci.sh` | sestavení samostatné `.app` a instalačního DMG (PyInstaller) |
 | `vyber_python.sh` | výběr vhodného Pythonu pro sestavení |
 | `publish_release.sh` | vydání nové verze na GitHub (sestavení, nahrání, Release) |
+| `install.sh` | instalace nejnovější verze jedním příkazem v Terminálu |
 | `tkinterdnd2/` | knihovna pro přetahování myší ([tkinterdnd2](https://github.com/Eliav2/tkinterdnd2), licence MIT) |
 | `CHANGELOG.md` | historie verzí |

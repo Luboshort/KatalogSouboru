@@ -19,6 +19,7 @@ import sys
 import json
 import gzip
 import heapq
+import hashlib
 import shutil
 import tempfile
 import traceback
@@ -42,7 +43,7 @@ except Exception:
     _DnDBase = object
 
 APP_NAME = "Katalog souborů"
-APP_VERSION = "1.13"
+APP_VERSION = "1.14"
 APP_TITLE = f"{APP_NAME} {APP_VERSION}"
 EXT = ".katalog"
 ARCHIVE_DIR = "Katalog archive"
@@ -172,11 +173,97 @@ def fetch_latest_release(timeout=10):
     if code != 200:
         raise OSError(f"GitHub odpověděl kódem {code}")
     data = json.loads(body)
-    dmg = next((a.get("browser_download_url") for a in data.get("assets", [])
-                if str(a.get("name", "")).lower().endswith(".dmg")), None)
+    asset = next((a for a in data.get("assets", [])
+                  if str(a.get("name", "")).lower().endswith(".dmg")), {})
     return {"version": str(data.get("tag_name", "")).lstrip("vV"),
             "page": data.get("html_url") or RELEASES_PAGE,
-            "dmg": dmg, "notes": data.get("body") or ""}
+            "dmg": asset.get("browser_download_url"), "digest": asset.get("digest") or "",
+            "notes": data.get("body") or ""}
+
+
+# ---------------------------------------------------------------- instalace aktualizace
+# Aplikace si DMG stáhne sama přes curl – takový soubor nedostane od macOS značku „staženo
+# z internetu“, takže nová verze se spustí bez varování Gatekeeperu (na rozdíl od stažení prohlížečem).
+
+def current_app_bundle():
+    """Cesta k běžící KatalogSouboru.app (None, když neběží jako sestavená aplikace)."""
+    if not getattr(sys, "frozen", False):
+        return None
+    app = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(sys.executable))))
+    return app if app.endswith(".app") else None
+
+
+def install_target(app):
+    """Kam nainstalovat novou verzi: na místo současné, když tam jde zapisovat, jinak do ~/Applications."""
+    parent = os.path.dirname(app)
+    if not app.startswith("/Volumes/") and os.access(parent, os.W_OK) and os.access(app, os.W_OK):
+        return app
+    return os.path.join(os.path.expanduser("~/Applications"), os.path.basename(app))
+
+
+def prepare_update(rel, workdir):
+    """Stáhne DMG, ověří kontrolní součet a podpis a vybalí aplikaci. Vrátí cestu k nové .app."""
+    dmg = os.path.join(workdir, "update.dmg")
+    r = subprocess.run(["curl", "-fsSL", "--max-time", "900", "-o", dmg, rel["dmg"]],
+                       capture_output=True, text=True)
+    if r.returncode != 0 or not os.path.exists(dmg):
+        raise OSError("Stažení se nepovedlo: " + (r.stderr.strip() or f"kód {r.returncode}"))
+    if rel.get("digest", "").startswith("sha256:"):
+        h = hashlib.sha256()
+        with open(dmg, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+        if h.hexdigest() != rel["digest"].split(":", 1)[1]:
+            raise OSError("Stažený soubor je poškozený (nesouhlasí kontrolní součet). Zkus to znovu.")
+    mnt = os.path.join(workdir, "mnt")
+    os.makedirs(mnt, exist_ok=True)
+    r = subprocess.run(["hdiutil", "attach", "-nobrowse", "-readonly", "-noautoopen", "-mountpoint", mnt, dmg],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        raise OSError("DMG nejde otevřít: " + r.stderr.strip())
+    try:
+        apps = [x for x in os.listdir(mnt) if x.endswith(".app")]
+        if not apps:
+            raise OSError("V DMG není aplikace.")
+        new = os.path.join(workdir, "new", apps[0])
+        os.makedirs(os.path.dirname(new), exist_ok=True)
+        r = subprocess.run(["ditto", os.path.join(mnt, apps[0]), new], capture_output=True, text=True)
+        if r.returncode != 0:
+            raise OSError("Aplikaci nejde zkopírovat: " + r.stderr.strip())
+    finally:
+        subprocess.run(["hdiutil", "detach", "-quiet", "-force", mnt], capture_output=True)
+    subprocess.run(["xattr", "-cr", new], capture_output=True)
+    r = subprocess.run(["codesign", "--verify", new], capture_output=True, text=True)
+    if r.returncode != 0:
+        raise OSError("Podpis nové verze nesouhlasí: " + r.stderr.strip())
+    return new
+
+
+# Pomocný skript: počká, až se aplikace zavře, vymění ji za novou (při chybě vrátí původní) a spustí.
+UPDATE_HELPER = r"""#!/bin/bash
+PID="${1}"; NEW="${2}"; APP="${3}"; LOG="${4}"
+WORK="$(dirname "$(dirname "${NEW}")")"
+exec >>"${LOG}" 2>&1
+echo "$(date '+%Y-%m-%d %H:%M:%S') [aktualizace] ${NEW} -> ${APP}"
+for i in $(seq 1 240); do kill -0 "${PID}" 2>/dev/null || break; sleep 0.5; done
+mkdir -p "$(dirname "${APP}")"
+OLD="${APP}.puvodni"
+rm -rf "${OLD}"
+if [ -e "${APP}" ]; then
+  if ! mv "${APP}" "${OLD}"; then echo "  puvodni verzi nejde presunout"; open "${APP}"; exit 1; fi
+fi
+if ditto "${NEW}" "${APP}"; then
+  rm -rf "${OLD}"
+  xattr -cr "${APP}" 2>/dev/null
+  echo "  hotovo"
+else
+  echo "  chyba - vracim puvodni verzi"
+  rm -rf "${APP}"
+  if [ -e "${OLD}" ]; then mv "${OLD}" "${APP}"; fi
+fi
+open "${APP}"
+rm -rf "${WORK}"
+"""
 
 
 def load_settings():
@@ -1575,7 +1662,8 @@ class App(tk.Tk, _DnDBase):
         self.upd_bar = tk.Frame(self, bg=bg, highlightthickness=1, highlightbackground="#e8c766")
         self.upd_text = tk.Label(self.upd_bar, bg=bg, fg=fg, font=("TkDefaultFont", 13, "bold"))
         self.upd_text.pack(side="left", padx=(12, 16), pady=8)
-        ttk.Button(self.upd_bar, text="Stáhnout", command=self._update_download).pack(side="left")
+        self.btn_upd = ttk.Button(self.upd_bar, text="Nainstalovat a restartovat", command=self._update_install)
+        self.btn_upd.pack(side="left")
         ttk.Button(self.upd_bar, text="Co je nového", command=self._update_notes).pack(side="left", padx=6)
         ttk.Button(self.upd_bar, text="Skrýt", command=self.upd_bar.pack_forget).pack(side="right", padx=8)
         self._upd = None
@@ -1617,23 +1705,65 @@ class App(tk.Tk, _DnDBase):
             messagebox.showinfo(APP_NAME, f"Máš nejnovější verzi ({APP_VERSION})." if rel else
                                 "Na GitHubu zatím není vydaná žádná verze.")
 
-    def _update_download(self):
+    def _update_install(self):
         rel = self._upd
         if not rel:
             return
-        subprocess.run(["open", rel["dmg"] or rel["page"]])
-        messagebox.showinfo(APP_NAME, f"Stahuje se verze {rel['version']}.\n\n"
-                            "1. Ukonči Katalog souborů (Cmd+Q).\n"
-                            "2. Otevři stažené DMG (ve Stažených souborech).\n"
-                            "3. Přetáhni aplikaci do složky Aplikace a potvrď „Nahradit“.\n"
-                            "4. Spusť aplikaci znovu.\n\n"
-                            "Katalogy ani nastavení se nemění.")
+        app = current_app_bundle()
+        if not app or not rel.get("dmg"):              # spuštěno ze zdrojáků / vydání bez DMG
+            subprocess.run(["open", rel["page"]])
+            return
+        if self.busy:
+            messagebox.showinfo(APP_NAME, "Počkej, až doběhne skenování nebo načítání katalogu.")
+            return
+        target = install_target(app)
+        txt = (f"Nainstalovat verzi {rel['version']}?\n\nAplikace si ji stáhne, zavře se a spustí se znovu "
+               "už v nové verzi. Katalogy ani nastavení se nemění.")
+        if target != app:
+            txt += (f"\n\nDo současného umístění aplikace nemáš právo zápisu, nová verze se proto "
+                    f"nainstaluje do\n{target}\n(odkaz v Docku si pak případně přetáhni znovu).")
+        if not messagebox.askyesno(APP_NAME, txt):
+            return
+        self._set_busy(True)
+        self.btn_upd.configure(state="disabled")
+        self.upd_text.configure(text=f"⏳  Stahuji a připravuji verzi {rel['version']}…")
+        self.status.set("Stahuji aktualizaci…")
+        workdir = tempfile.mkdtemp(prefix="katalog-update-")
+
+        def worker():
+            try:
+                new = prepare_update(rel, workdir)
+                self.msgs.put(("upd_ready", new, target, workdir))
+            except Exception as ex:
+                log_error("Aktualizace selhala:\n" + traceback.format_exc())
+                self.msgs.put(("upd_failed", str(ex), workdir))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _upd_ready(self, new, target, workdir):
+        script = os.path.join(workdir, "instalace.sh")
+        with open(script, "w", encoding="utf-8") as f:
+            f.write(UPDATE_HELPER)
+        subprocess.Popen(["/bin/bash", script, str(os.getpid()), new, target, LOG_FILE],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        log_error(f"Instaluji aktualizaci do {target}, aplikace se restartuje.")
+        self._on_close()
+
+    def _upd_failed(self, err, workdir):
+        shutil.rmtree(workdir, ignore_errors=True)
+        self._set_busy(False)
+        self.btn_upd.configure(state="normal")
+        rel = self._upd or {}
+        self.upd_text.configure(text=f"🔔  Je k dispozici nová verze {rel.get('version', '')}  "
+                                     f"(máš {APP_VERSION})")
+        self.status.set("Aktualizace se nepovedla.")
+        messagebox.showerror(APP_NAME, f"Aktualizaci se nepodařilo nainstalovat:\n\n{err}\n\n"
+                             f"Současná verze zůstala beze změny. Podrobnosti: {LOG_FILE}")
 
     def _update_notes(self):
         rel = self._upd
         if not rel:
             return
-        notes = rel["notes"].strip() or "Popis změn není uvedený."
+        notes = rel["notes"].split("\n---\n")[0].strip() or "Popis změn není uvedený."   # bez návodu k instalaci
         if len(notes) > 1500:
             notes = notes[:1500] + "…"
         messagebox.showinfo(APP_NAME, f"Novinky ve verzi {rel['version']}:\n\n{notes}")
@@ -1764,6 +1894,10 @@ class App(tk.Tk, _DnDBase):
             if png:
                 self._pv_cache[(p, size)] = png
             self._preview_show(req, png)
+        elif kind == "upd_ready":
+            self._upd_ready(m[1], m[2], m[3])
+        elif kind == "upd_failed":
+            self._upd_failed(m[1], m[2])
         elif kind == "update":
             self._on_update(m[1], m[2], m[3])
         elif kind == "cancelled":

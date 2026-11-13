@@ -1,5 +1,9 @@
 # Historie verzí
 
+## 1.14
+- Aktualizace se instaluje přímo v aplikaci tlačítkem „Nainstalovat a restartovat“ – bez prohlížeče a bez varování macOS.
+- Instalace jedním příkazem v Terminálu (install.sh) – funguje i na firemních Macech, kde nejde povolit aplikaci z internetu.
+
 ## 1.13
 - Tlačítko „Zkontrolovat aktualizace“ a číslo verze jsou ve spodní liště, vidět na všech záložkách.
 

@@ -102,8 +102,11 @@ Pokud macOS při prvním spuštění napíše, že aplikaci nemůže ověřit:
 
 Aplikace je pro Macy s procesorem Apple (M1 a novější).
 
-Aktualizace: aplikace sama zjistí, že je na GitHubu nová verze, a nahoře v okně
-nabídne její stažení. Novou verzi nainstaluješ stejně – přetažením do Aplikací.
+Pokud firemní Mac aplikaci nedovolí otevřít, nainstaluj ji v Terminálu:
+   curl -fsSL https://raw.githubusercontent.com/Luboshort/KatalogSouboru/main/install.sh | bash
+
+Aktualizace: aplikace sama zjistí, že je na GitHubu nová verze, a nainstaluje ji
+tlačítkem „Nainstalovat a restartovat“.
 TXT
 DMG="$HOME/Desktop/$NAME-$VERSION.dmg"
 rm -f "$DMG"

@@ -61,7 +61,7 @@ git clone -q "$GIT_URL" "$TMP/repo" 2>/dev/null || { echo "CHYBA: repozitář $G
 cd "$TMP/repo"
 git checkout -q -B main
 find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
-for f in katalog.py vyber_python.sh vytvor_samostatnou_aplikaci.sh publish_release.sh README.md CHANGELOG.md .gitignore tkinterdnd2; do
+for f in katalog.py vyber_python.sh vytvor_samostatnou_aplikaci.sh publish_release.sh install.sh README.md CHANGELOG.md .gitignore tkinterdnd2; do
   if [ -e "$SRC/$f" ]; then cp -R "$SRC/$f" .; fi
 done
 find . -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null || true
@@ -77,9 +77,17 @@ fi
 git push -q -u origin main
 cd "$SRC"
 
-# 3) vydání
+# 3) vydání – DMG se stálým názvem (install.sh stahuje …/releases/latest/download/KatalogSouboru.dmg)
 echo "› Vytvářím vydání v${VER}…"
-gh release create "v$VER" "$DMG" --repo "$REPO" --target main \
+cp "$DMG" "$TMP/KatalogSouboru.dmg"
+NOTES="${NOTES}
+
+---
+**Nová instalace** – v Terminálu:
+\`curl -fsSL https://raw.githubusercontent.com/$REPO/main/install.sh | bash\`
+
+Kdo už aplikaci má, dostane tuto verzi nabídnutou přímo v aplikaci."
+gh release create "v$VER" "$TMP/KatalogSouboru.dmg" --repo "$REPO" --target main \
   --title "Katalog souborů $VER" --notes "$NOTES" --latest
 echo
 echo "✅ Vydáno: https://github.com/$REPO/releases/tag/v$VER"
