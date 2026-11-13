@@ -42,7 +42,7 @@ except Exception:
     _DnDBase = object
 
 APP_NAME = "Katalog souborů"
-APP_VERSION = "1.12"
+APP_VERSION = "1.13"
 APP_TITLE = f"{APP_NAME} {APP_VERSION}"
 EXT = ".katalog"
 ARCHIVE_DIR = "Katalog archive"
@@ -513,8 +513,15 @@ class App(tk.Tk, _DnDBase):
         self._build_search_tab()
 
 
+        # spodní lišta – stejná na všech záložkách: stav vlevo, verze a aktualizace vpravo
         self.status = tk.StringVar(value="Připraveno.")
-        ttk.Label(self, textvariable=self.status, anchor="w", padding=(10, 2, 10, 6)).pack(fill="x")
+        bar = ttk.Frame(self, padding=(10, 2, 10, 6))
+        bar.pack(side="bottom", fill="x", before=self.nb)     # při zmenšení okna zůstane vidět
+        ttk.Separator(self).pack(side="bottom", fill="x", before=self.nb)   # čára nad lištou
+        ttk.Button(bar, text="Zkontrolovat aktualizace",
+                   command=lambda: self.check_updates(manual=True)).pack(side="right")
+        ttk.Label(bar, text=f"verze {APP_VERSION}", foreground="gray").pack(side="right", padx=(10, 8))
+        ttk.Label(bar, textvariable=self.status, anchor="w").pack(side="left", fill="x", expand=True)
 
     def _build_scan_tab(self):
         t = self.tab_scan
@@ -566,9 +573,6 @@ class App(tk.Tk, _DnDBase):
                            "\nŘešení: na Macu s Apple Silicon spusť aplikaci nativním Pythonem z python.org, na Intel Macu Pythonem 3.13. "
                            "Do té doby lze složky přetáhnout na ikonu aplikace v Docku nebo přidat tlačítkem."
                       ).pack(side="left")
-        ttk.Label(foot, text=f"{APP_NAME} – verze {APP_VERSION}", foreground="gray").pack(side="right")
-        ttk.Button(foot, text="Zkontrolovat aktualizace",
-                   command=lambda: self.check_updates(manual=True)).pack(side="right", padx=10)
 
     def _build_search_tab(self):
         t = self.tab_search

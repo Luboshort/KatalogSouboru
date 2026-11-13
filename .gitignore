@@ -1,0 +1,18 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+
+# výstupy sestavení
+build/
+dist/
+*.spec
+*.dmg
+
+# katalogy a jejich zálohy (obsahují cesty k firemním souborům – na GitHub nepatří)
+*.katalog
+*.katalog.tmp
+Katalog archive/
+* - nectene slozky.txt

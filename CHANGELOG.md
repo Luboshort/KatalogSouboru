@@ -1,5 +1,8 @@
 # Historie verzí
 
+## 1.13
+- Tlačítko „Zkontrolovat aktualizace“ a číslo verze jsou ve spodní liště, vidět na všech záložkách.
+
 ## 1.12
 - Automatická kontrola aktualizací na GitHubu: při nové verzi se nahoře v okně objeví pruh s tlačítkem „Stáhnout“.
 - Tlačítko „Zkontrolovat aktualizace“ na záložce „Vytvořit katalog“.

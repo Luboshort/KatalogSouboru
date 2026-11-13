@@ -19,7 +19,7 @@ Pro Macy s procesorem Apple (M1 a novější), macOS 26 Tahoe.
 
 ## Aktualizace
 
-Aplikace při spuštění (a pak jednou denně) zkontroluje GitHub. Když je k dispozici nová verze, nahoře v okně se objeví žlutý pruh s tlačítkem **Stáhnout**. Ručně: tlačítko **Zkontrolovat aktualizace** na záložce „Vytvořit katalog“.
+Aplikace při spuštění (a pak jednou denně) zkontroluje GitHub. Když je k dispozici nová verze, nahoře v okně se objeví žlutý pruh s tlačítkem **Stáhnout**. Ručně: tlačítko **Zkontrolovat aktualizace** vpravo ve spodní liště okna.
 
 ## Sestavení ze zdrojových kódů
 
@@ -33,12 +33,17 @@ Výsledek: `~/Applications/KatalogSouboru.app` a `~/Desktop/KatalogSouboru-<verz
 
 ## Vydání nové verze
 
-1. V `katalog.py` zvyš `APP_VERSION` (např. `"1.13"`) a doplň změny do `CHANGELOG.md`.
-2. Sestav aplikaci (`bash vytvor_samostatnou_aplikaci.sh`) a vyzkoušej ji.
-3. Nahraj změněné soubory do tohoto repozitáře.
-4. **Releases → Draft a new release**: tag `v1.13` (písmeno v + přesně číslo z `APP_VERSION`), název `Katalog souborů 1.13`, do popisu změny z `CHANGELOG.md`, přilož `KatalogSouboru-1.13.dmg` a **Publish release**.
+Potřebuješ jednou: GitHub CLI (`brew install gh` a `gh auth login`).
 
-Aplikace porovnává číslo verze z tagu s vlastním `APP_VERSION`; DMG přiložené k vydání nabídne ke stažení.
+1. V `katalog.py` zvyš `APP_VERSION` (např. `"1.13"`) a do `CHANGELOG.md` přidej oddíl `## 1.13` se změnami.
+2. V Terminálu ve složce projektu spusť:
+   ```
+   ./publish_release.sh
+   ```
+   Skript sestaví aplikaci a DMG, nahraje zdrojové soubory do repozitáře a vytvoří vydání `v1.13`
+   s přiloženým DMG. Popis změn vezme z `CHANGELOG.md`, případně `--notes "…"`.
+
+Aplikace porovnává číslo verze z tagu vydání s vlastním `APP_VERSION` a nabídne přiložené DMG ke stažení.
 
 ## Soubory
 
@@ -47,5 +52,6 @@ Aplikace porovnává číslo verze z tagu s vlastním `APP_VERSION`; DMG přilo�
 | `katalog.py` | celá aplikace (Python + Tkinter) |
 | `vytvor_samostatnou_aplikaci.sh` | sestavení samostatné `.app` a instalačního DMG (PyInstaller) |
 | `vyber_python.sh` | výběr vhodného Pythonu pro sestavení |
+| `publish_release.sh` | vydání nové verze na GitHub (sestavení, nahrání, Release) |
 | `tkinterdnd2/` | knihovna pro přetahování myší ([tkinterdnd2](https://github.com/Eliav2/tkinterdnd2), licence MIT) |
 | `CHANGELOG.md` | historie verzí |
