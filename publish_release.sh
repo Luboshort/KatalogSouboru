@@ -4,6 +4,7 @@
 #   ./publish_release.sh                         popis změn se vezme z CHANGELOG.md (oddíl „## <verze>“)
 #   ./publish_release.sh --notes "Co je nového"  vlastní popis
 #   ./publish_release.sh --notes-file soubor.md
+#   ./publish_release.sh --jen-navod             jen nahraje soubory (README…) – bez sestavení a bez vydání
 #   (--full se přijímá kvůli jednotnosti s ostatními projekty – DMG je vždy celá aplikace)
 #
 # Postup: 1) zkontroluje verzi  2) sestaví aplikaci + DMG  3) nahraje zdrojové soubory do repozitáře
@@ -14,9 +15,11 @@ cd "$(dirname "$0")"
 SRC="$(pwd)"
 
 NOTES=""
+ONLY_FILES=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --full) shift ;;
+    --jen-navod) ONLY_FILES=1; shift ;;
     --notes) NOTES="$2"; shift 2 ;;
     --notes-file) NOTES="$(cat "$2")"; shift 2 ;;
     *) echo "Neznámá volba $1"; exit 1 ;;
@@ -32,6 +35,7 @@ if ! command -v git >/dev/null 2>&1; then echo "CHYBA: chybí git – spusť 'xc
 if ! gh auth status >/dev/null 2>&1; then echo "CHYBA: GitHub CLI není přihlášené – spusť 'gh auth login'"; exit 1; fi
 
 echo "› Katalog souborů $VER → $REPO"
+if [ "$ONLY_FILES" = "0" ]; then
 if gh release view "v$VER" --repo "$REPO" >/dev/null 2>&1; then
   echo "CHYBA: vydání v$VER už na GitHubu existuje – zvyš APP_VERSION v katalog.py (a doplň CHANGELOG.md)."
   exit 1
@@ -51,6 +55,7 @@ echo "› Sestavuji aplikaci…"
 bash "$SRC/vytvor_samostatnou_aplikaci.sh"
 DMG="$HOME/Desktop/KatalogSouboru-$VER.dmg"
 if [ ! -f "$DMG" ]; then echo "CHYBA: nenašel jsem $DMG – sestavení se nepovedlo."; exit 1; fi
+fi
 
 # 2) zdrojové soubory do repozitáře (větev main)
 echo "› Nahrávám zdrojové soubory do repozitáře…"
@@ -72,10 +77,14 @@ if git diff --cached --quiet; then
 else
   git -c user.name="$(gh api user --jq .login 2>/dev/null || echo katalog)" \
       -c user.email="$(gh api user --jq .login 2>/dev/null || echo katalog)@users.noreply.github.com" \
-      commit -q -m "Katalog souborů $VER"
+      commit -q -m "$([ "$ONLY_FILES" = "1" ] && echo "Aktualizace návodu" || echo "Katalog souborů ${VER}")"
 fi
 git push -q -u origin main
 cd "$SRC"
+if [ "$ONLY_FILES" = "1" ]; then
+  echo "✅ Soubory nahrány: https://github.com/$REPO"
+  exit 0
+fi
 
 # 3) vydání – DMG se stálým názvem (install.sh stahuje …/releases/latest/download/KatalogSouboru.dmg)
 echo "› Vytvářím vydání v${VER}…"

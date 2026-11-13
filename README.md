@@ -2,15 +2,6 @@
 
 Aplikace pro macOS, která projde zadané složky (i síťové disky) a uloží katalog všech souborů a složek do souboru `.katalog`. V katalogu se pak dá rychle hledat, i když disk není připojený, a nalezenou položku zobrazit ve Finderu.
 
-- Hledání v názvech souborů i složek: více výrazů najednou (A / NEBO), přesná fráze v uvozovkách, vyloučení `-výraz`; velikost písmen a diakritika nehrají roli.
-- Výsledky jako seznam (název, upraveno, vytvořeno, velikost, cesta) s řazením, nebo jako strom složek.
-- Náhled souboru mezerníkem, dvojklik = zobrazit ve Finderu.
-- Aktualizace katalogu se zálohou předchozí verze do složky `Katalog archive`.
-- Zvládá katalogy s miliony položek.
-- Sama upozorní, když je na GitHubu nová verze.
-
-Pro Macy s procesorem Apple (M1 a novější), macOS 26 Tahoe.
-
 ## Instalace
 
 Otevři **Terminál** a vlož tento příkaz:
@@ -24,6 +15,17 @@ Stáhne nejnovější verzi, nainstaluje ji do složky Aplikace (bez práv sprá
 Proč ne stažením DMG v prohlížeči: soubor stažený prohlížečem dostane od macOS značku „staženo z internetu“
 a aplikace bez placeného podpisu Apple se pak zablokuje s varováním o možném malwaru. Na firemních Macech
 ji často nejde ani povolit. Soubor stažený z Terminálu tuto značku nedostane.
+
+## Co umí
+
+- Hledání v názvech souborů i složek: více výrazů najednou (A / NEBO), přesná fráze v uvozovkách, vyloučení `-výraz`; velikost písmen a diakritika nehrají roli.
+- Výsledky jako seznam (název, upraveno, vytvořeno, velikost, cesta) s řazením, nebo jako strom složek.
+- Náhled souboru mezerníkem, dvojklik = zobrazit ve Finderu.
+- Aktualizace katalogu se zálohou předchozí verze do složky `Katalog archive`.
+- Zvládá katalogy s miliony položek.
+- Sama upozorní, když je na GitHubu nová verze.
+
+Pro Macy s procesorem Apple (M1 a novější), macOS 26 Tahoe.
 
 ## Aktualizace
 
