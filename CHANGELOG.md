@@ -1,5 +1,10 @@
 # Historie verzí
 
+## 1.15
+- Teploměr při aktualizaci katalogu: procenta a odhad zbývajícího času. Odhad = dosavadní počet položek + průměrný denní přírůstek za posledních 30 dní × počet dní od poslední aktualizace.
+- U nového katalogu se ukazuje počet nalezených položek, rychlost a doba běhu.
+- Průběh je vidět i ve spodní liště na všech záložkách; po dokončení se ukáže, jak dlouho aktualizace trvala.
+
 ## 1.14
 - Aktualizace se instaluje přímo v aplikaci tlačítkem „Nainstalovat a restartovat“ – bez prohlížeče a bez varování macOS.
 - Instalace jedním příkazem v Terminálu (install.sh) – funguje i na firemních Macech, kde nejde povolit aplikaci z internetu.

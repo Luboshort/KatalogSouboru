@@ -43,7 +43,7 @@ except Exception:
     _DnDBase = object
 
 APP_NAME = "Katalog souborů"
-APP_VERSION = "1.14"
+APP_VERSION = "1.15"
 APP_TITLE = f"{APP_NAME} {APP_VERSION}"
 EXT = ".katalog"
 ARCHIVE_DIR = "Katalog archive"
@@ -140,6 +140,60 @@ def read_count(path):
         return int(m.group(1)) if m else None
     except Exception:
         return None
+
+
+GROWTH_DAYS = 30            # přírůstek se počítá z posledních 30 dní
+
+
+def growth_per_day(entries, ref_time):
+    """Průměrný denní přírůstek položek za posledních GROWTH_DAYS dní před ref_time
+    (podle data vytvoření; kde chybí, podle data úpravy)."""
+    lo = ref_time - GROWTH_DAYS * 86400
+    n = 0
+    for e in entries:
+        t = e[5] or e[4]
+        if lo <= t <= ref_time:
+            n += 1
+    return n / GROWTH_DAYS
+
+
+def read_header(path):
+    """Hlavička katalogu (kořeny, datum, počet, přírůstek) bez načítání celého souboru."""
+    try:
+        with gzip.open(path, "rb") as f:
+            head = f.read(512 * 1024)
+        part = head.split(b',"entries":', 1)
+        if len(part) < 2:
+            return None
+        return json.loads(part[0].decode("utf-8") + "}")
+    except Exception:
+        return None
+
+
+def scan_estimate(old_entries, old_roots, old_created, old_count, old_growth, roots, now=None):
+    """Odhad počtu položek nového skenování = dosavadní počet + denní přírůstek × dny od poslední
+    aktualizace. None, když to nejde (nový katalog, jiné složky, neznámý počet)."""
+    now = now or time.time()
+    if not old_created or list(old_roots or []) != list(roots):
+        return None
+    if old_entries is not None:
+        n0, growth = len(old_entries), growth_per_day(old_entries, old_created)
+    else:
+        n0, growth = old_count, (old_growth or 0.0)
+    if not n0:
+        return None
+    days = max(0.0, (now - old_created) / 86400)
+    return {"total": n0 + growth * days, "base": n0, "growth": growth, "days": days}
+
+
+def fmt_dur(sec):
+    sec = int(max(0, sec))
+    if sec < 60:
+        return f"{sec} s"
+    if sec < 3600:
+        return f"{round(sec / 60)} min"
+    h, m = divmod(round(sec / 60), 60)
+    return f"{h} h {m} min" if m else f"{h} h"
 
 
 def version_tuple(v):
@@ -302,6 +356,7 @@ class Catalog:
             "created": self.created,
             "roots": self.roots,
             "options": self.options,
+            "growth_per_day": round(growth_per_day(self.entries, self.created), 2),
             "count": len(self.entries),
             "entries": self.entries,
         }
@@ -872,10 +927,10 @@ class App(tk.Tk, _DnDBase):
 
         skip_hidden, skip_pkg = self.var_hidden.get(), self.var_packages.get()
         # počet položek starého katalogu (pro kontrolu, jestli nový není podezřele menší)
-        old_n = None
+        old_n, old_cat = None, None
         if os.path.exists(save_path):
             if self.catalog and self.catalog.path and os.path.abspath(self.catalog.path) == os.path.abspath(save_path):
-                old_n = len(self.catalog.entries)
+                old_n, old_cat = len(self.catalog.entries), self.catalog
             # kontrola, že půjde vytvořit záloha – ještě před dlouhým skenováním
             arch = os.path.join(os.path.dirname(os.path.abspath(save_path)), ARCHIVE_DIR)
             try:
@@ -886,12 +941,14 @@ class App(tk.Tk, _DnDBase):
                 messagebox.showerror(APP_NAME, f"Nejde vytvořit zálohu ve složce\n{arch}\n\n{ex}\n\n"
                                      "Aktualizace se proto nespustila, katalog zůstal beze změny.")
                 return
-        self._launch_scan(roots, save_path, skip_hidden, skip_pkg, old_n)
+        self._launch_scan(roots, save_path, skip_hidden, skip_pkg, old_n, old_cat)
 
-    def _launch_scan(self, roots, save_path, skip_hidden, skip_pkg, old_n):
+    def _launch_scan(self, roots, save_path, skip_hidden, skip_pkg, old_n, old_cat=None):
         """Spustí skenování na pozadí."""
         self._set_busy(True)
         self.cancel_ev.clear()
+        self._scan_t0 = time.time()
+        self._scan_plan = None
         self.scan_info.set("Skenuji…")
 
         def ask(kind, *args):
@@ -905,6 +962,19 @@ class App(tk.Tk, _DnDBase):
             def progress(n, d):
                 self.msgs.put(("progress", n, d))
             try:
+                # odhad počtu položek pro teploměr (jen u aktualizace existujícího katalogu)
+                try:
+                    if old_cat is not None:
+                        plan = scan_estimate(old_cat.entries, old_cat.roots, old_cat.created, None, None, roots)
+                    elif os.path.exists(save_path):
+                        h = read_header(save_path) or {}
+                        plan = scan_estimate(None, h.get("roots"), h.get("created"), h.get("count"),
+                                             h.get("growth_per_day"), roots)
+                    else:
+                        plan = None
+                except Exception:
+                    plan = None
+                self.msgs.put(("scan_plan", plan))
                 r = scan_folders(roots, skip_hidden, skip_pkg, progress, self.cancel_ev)
                 entries = r["entries"]
                 if entries is None:
@@ -1774,11 +1844,40 @@ class App(tk.Tk, _DnDBase):
         self.btn_scan.configure(state="disabled" if b else "normal")
         self.btn_cancel.configure(state="normal" if b else "disabled")
         if b:
+            self.progress.configure(mode="indeterminate", value=0)
             self.progress.start(12)
             self.configure(cursor="watch")
         else:
             self.progress.stop()
+            self.progress.configure(mode="indeterminate", value=0)
             self.configure(cursor="")
+
+    def _progress_indeterminate(self):
+        if str(self.progress.cget("mode")) != "indeterminate":
+            self.progress.configure(mode="indeterminate", value=0)
+            self.progress.start(12)
+
+    def _scan_progress(self, n, folder):
+        """Teploměr skenování: % z odhadu (u aktualizace) a zbývající čas, jinak počet a rychlost."""
+        el = max(0.001, time.time() - getattr(self, "_scan_t0", time.time()))
+        rate = n / el
+        plan = getattr(self, "_scan_plan", None)
+        if plan and plan["total"] > 0:
+            total = plan["total"]
+            pct = min(99.0, 100.0 * n / total)
+            self.progress["value"] = pct
+            if el < 10 or n < 500:
+                eta = "odhaduji zbývající čas…"
+            elif n >= total:
+                eta = "dokončuji (přibylo víc položek, než se čekalo)"
+            else:
+                eta = f"zbývá asi {fmt_dur((total - n) / rate)}"
+            line = f"{pct:.0f} %  ·  {fmt_n(n)} z asi {fmt_n(round(total))} položek  ·  {eta}"
+        else:
+            line = f"{fmt_n(n)} položek  ·  {fmt_n(round(rate))}/s  ·  běží {fmt_dur(el)}"
+        short = folder if len(folder) < 90 else "…" + folder[-88:]
+        self.scan_info.set(line + "\n" + short)
+        self.status.set("Skenování: " + line)
 
     def _poll(self):
         """Zpracuje zprávy z vláken na pozadí. Chyba v jedné zprávě nesmí zastavit ostatní."""
@@ -1819,10 +1918,19 @@ class App(tk.Tk, _DnDBase):
     def _handle_msg(self, m):
         kind = m[0]
         if kind == "progress":
-            short = m[2] if len(m[2]) < 90 else "…" + m[2][-88:]
-            self.scan_info.set(f"Nalezeno {fmt_n(m[1])} položek… {short}")
+            self._scan_progress(m[1], m[2])
+        elif kind == "scan_plan":
+            self._scan_plan = m[1]
+            if m[1]:
+                self.progress.stop()
+                self.progress.configure(mode="determinate", maximum=100, value=0)
+                p = m[1]
+                log_error(f"Odhad skenování: {fmt_n(p['base'])} + {p['growth']:.0f}/den × {p['days']:.1f} dne "
+                          f"= {fmt_n(round(p['total']))} položek")
         elif kind == "saving":
+            self._progress_indeterminate()
             self.scan_info.set(f"Ukládám katalog ({fmt_n(m[1])} položek)…")
+            self.status.set("Ukládám katalog…")
         elif kind == "ask_shrink":
             _, ev, box, n_old, n_new, n_failed = m
             try:
@@ -1844,7 +1952,8 @@ class App(tk.Tk, _DnDBase):
         elif kind == "scan_done":
             self._set_busy(False)
             _, cat, n_failed, n_items, report = m
-            info = f"Hotovo: {fmt_n(len(cat.entries))} položek uloženo do {cat.path}"
+            info = (f"Hotovo: {fmt_n(len(cat.entries))} položek uloženo do {cat.path}  ·  "
+                    f"trvalo {fmt_dur(time.time() - getattr(self, '_scan_t0', time.time()))}")
             if getattr(self, "_last_backup", None):
                 info += f"  ·  záloha: {ARCHIVE_DIR}/{os.path.basename(self._last_backup)}"
                 self._last_backup = None
@@ -1866,6 +1975,8 @@ class App(tk.Tk, _DnDBase):
         elif kind == "load_progress":
             self._load_progress(m[1], m[2])
         elif kind == "archiving":
+            self._progress_indeterminate()
+            self.status.set("Zálohuji a ukládám katalog…")
             self.scan_info.set(f"Zálohuji současný katalog do složky „{ARCHIVE_DIR}“…")
         elif kind == "archived":
             self._last_backup = m[1]
