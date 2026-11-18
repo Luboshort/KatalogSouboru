@@ -29,9 +29,10 @@ Pro Macy s procesorem Apple (M1 a novější), macOS 26 Tahoe.
 
 ## Aktualizace
 
-Aplikace při spuštění (a pak jednou denně) zkontroluje GitHub. Když je k dispozici nová verze, nahoře v okně
-se objeví žlutý pruh s tlačítkem **Nainstalovat a restartovat** – aplikace si novou verzi stáhne, ověří,
-vymění se a znovu spustí. Ručně: **Zkontrolovat aktualizace** vpravo ve spodní liště okna.
+Aplikace při spuštění (a pak jednou denně) zkontroluje GitHub. Když je k dispozici nová verze, zeptá se,
+jestli ji nainstalovat – po **Ano** ji sama stáhne, ověří, nainstaluje a restartuje se. Když zrovna běží
+skenování, zeptá se, až doběhne. Po **Ne** zůstane nahoře žlutý pruh s tlačítkem pro pozdější instalaci.
+Ručně: **Zkontrolovat aktualizace** vpravo ve spodní liště okna.
 
 ## Sestavení ze zdrojových kódů
 

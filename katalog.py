@@ -43,7 +43,7 @@ except Exception:
     _DnDBase = object
 
 APP_NAME = "Katalog souborů"
-APP_VERSION = "1.15"
+APP_VERSION = "1.16"
 APP_TITLE = f"{APP_NAME} {APP_VERSION}"
 EXT = ".katalog"
 ARCHIVE_DIR = "Katalog archive"
@@ -634,6 +634,7 @@ class App(tk.Tk, _DnDBase):
             self.after(300, lambda: self._register_drop(self))
         self.after(100, self._poll)
         self.after(4000, self._update_tick)
+        self._after_update_notice()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
         path = open_path or self.settings.get("last_catalog")
@@ -1737,6 +1738,9 @@ class App(tk.Tk, _DnDBase):
         ttk.Button(self.upd_bar, text="Co je nového", command=self._update_notes).pack(side="left", padx=6)
         ttk.Button(self.upd_bar, text="Skrýt", command=self.upd_bar.pack_forget).pack(side="right", padx=8)
         self._upd = None
+        self._offered = None          # verze, na kterou se už v tomto spuštění ptal
+        self._offer_pending = False   # nabídka čeká, až doběhne skenování / načítání
+        self._installing = False
 
     def _update_tick(self):
         self.check_updates(manual=False)
@@ -1766,18 +1770,62 @@ class App(tk.Tk, _DnDBase):
             self._upd = rel
             self.upd_text.configure(text=f"🔔  Je k dispozici nová verze {rel['version']}  "
                                          f"(máš {APP_VERSION})")
-            if not self.upd_bar.winfo_ismapped():
+            if not self.upd_bar.winfo_ismapped() and not self._installing:
                 self.upd_bar.pack(fill="x", padx=8, pady=(8, 0), before=self.nb)
-            if manual:
-                self.status.set(f"Je k dispozici nová verze {rel['version']}.")
+            self.status.set(f"Je k dispozici nová verze {rel['version']}.")
+            if manual or self._offered != rel["version"]:
+                self._offer_update()
         elif manual:
             self.status.set("Máš nejnovější verzi.")
             messagebox.showinfo(APP_NAME, f"Máš nejnovější verzi ({APP_VERSION})." if rel else
                                 "Na GitHubu zatím není vydaná žádná verze.")
 
+    def _offer_update(self):
+        """Jeden dotaz: Ano = stáhnout, nainstalovat a restartovat bez dalších otázek."""
+        rel = self._upd
+        if not rel or self._installing:
+            return
+        if self.busy:                                  # nerušit skenování – zeptá se, až doběhne
+            self._offer_pending = True
+            return
+        self._offer_pending = False
+        self._offered = rel["version"]
+        notes = rel["notes"].split("\n---\n")[0].strip()
+        if len(notes) > 600:
+            notes = notes[:600] + "…"
+        app = current_app_bundle()
+        txt = f"Je k dispozici nová verze {rel['version']} (máš {APP_VERSION})."
+        if notes:
+            txt += f"\n\nNovinky:\n{notes}"
+        if app and rel.get("dmg"):
+            txt += ("\n\nNainstalovat teď? Aplikace si novou verzi stáhne, nainstaluje a sama se znovu "
+                    "spustí. Katalogy ani nastavení se nemění.")
+            target = install_target(app)
+            if target != app:
+                txt += (f"\n\n(Do současného umístění nemáš právo zápisu – nová verze bude v {target}.)")
+        else:
+            txt += "\n\nOtevřít stránku ke stažení?"
+        if messagebox.askyesno(APP_NAME, txt, icon="info"):
+            self._update_install()
+        else:
+            self.status.set("Novou verzi nainstaluješ kdykoli tlačítkem ve žlutém pruhu nahoře.")
+
+    def _after_update_notice(self):
+        """Po aktualizaci krátce ukáže, na jakou verzi se aplikace aktualizovala."""
+        prev = self.settings.get("app_version")
+        self.settings["app_version"] = APP_VERSION
+        save_settings(self.settings)
+        if not prev or version_tuple(APP_VERSION) <= version_tuple(prev):
+            return
+        note = tk.Label(self, text=f"✓  Aplikace byla aktualizována na verzi {APP_VERSION}",
+                        bg="#e5f4e4", fg="#1e6b2a", font=("TkDefaultFont", 13, "bold"), pady=8)
+        note.pack(fill="x", padx=8, pady=(8, 0), before=self.nb)
+        self.after(15000, note.destroy)
+        log_error(f"Aktualizováno z verze {prev} na {APP_VERSION}.")
+
     def _update_install(self):
         rel = self._upd
-        if not rel:
+        if not rel or self._installing:
             return
         app = current_app_bundle()
         if not app or not rel.get("dmg"):              # spuštěno ze zdrojáků / vydání bez DMG
@@ -1787,14 +1835,10 @@ class App(tk.Tk, _DnDBase):
             messagebox.showinfo(APP_NAME, "Počkej, až doběhne skenování nebo načítání katalogu.")
             return
         target = install_target(app)
-        txt = (f"Nainstalovat verzi {rel['version']}?\n\nAplikace si ji stáhne, zavře se a spustí se znovu "
-               "už v nové verzi. Katalogy ani nastavení se nemění.")
-        if target != app:
-            txt += (f"\n\nDo současného umístění aplikace nemáš právo zápisu, nová verze se proto "
-                    f"nainstaluje do\n{target}\n(odkaz v Docku si pak případně přetáhni znovu).")
-        if not messagebox.askyesno(APP_NAME, txt):
-            return
+        self._installing = True
         self._set_busy(True)
+        if not self.upd_bar.winfo_ismapped():
+            self.upd_bar.pack(fill="x", padx=8, pady=(8, 0), before=self.nb)
         self.btn_upd.configure(state="disabled")
         self.upd_text.configure(text=f"⏳  Stahuji a připravuji verzi {rel['version']}…")
         self.status.set("Stahuji aktualizaci…")
@@ -1820,6 +1864,7 @@ class App(tk.Tk, _DnDBase):
 
     def _upd_failed(self, err, workdir):
         shutil.rmtree(workdir, ignore_errors=True)
+        self._installing = False
         self._set_busy(False)
         self.btn_upd.configure(state="normal")
         rel = self._upd or {}
@@ -1851,6 +1896,8 @@ class App(tk.Tk, _DnDBase):
             self.progress.stop()
             self.progress.configure(mode="indeterminate", value=0)
             self.configure(cursor="")
+            if getattr(self, "_offer_pending", False):
+                self.after(800, self._offer_update)
 
     def _progress_indeterminate(self):
         if str(self.progress.cget("mode")) != "indeterminate":

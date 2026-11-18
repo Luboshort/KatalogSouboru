@@ -1,5 +1,10 @@
 # Historie verzí
 
+## 1.16
+- Aktualizace jedním klikem: aplikace sama nabídne novou verzi, po „Ano“ ji stáhne, nainstaluje a restartuje se bez dalších dotazů.
+- Během skenování nebo načítání katalogu nabídka počká, až práce doběhne.
+- Po restartu se nahoře krátce ukáže, na jakou verzi se aplikace aktualizovala.
+
 ## 1.15
 - Teploměr při aktualizaci katalogu: procenta a odhad zbývajícího času. Odhad = dosavadní počet položek + průměrný denní přírůstek za posledních 30 dní × počet dní od poslední aktualizace.
 - U nového katalogu se ukazuje počet nalezených položek, rychlost a doba běhu.
