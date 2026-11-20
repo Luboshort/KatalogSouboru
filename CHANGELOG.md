@@ -1,5 +1,9 @@
 # Historie verzí
 
+## 1.20
+- Oprava: tenká linka kolem plochy záložek je vidět (byla zakrytá výplní).
+- Oprava: zmizel tmavší pruh kolem obsahu záložek – plocha má jednotný systémový odstín macOS.
+
 ## 1.19
 - Linka kolem plochy záložek vede po jejím vnějším okraji a nahoře středem záložek; ztmavená je celá plocha až k lince.
 - Odstraněna dvojitá linka nad výpisem (nad sloupci zůstává jen čára záhlaví).

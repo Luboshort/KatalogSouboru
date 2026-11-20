@@ -43,7 +43,7 @@ except Exception:
     _DnDBase = object
 
 APP_NAME = "Katalog souborů"
-APP_VERSION = "1.19"
+APP_VERSION = "1.20"
 APP_TITLE = f"{APP_NAME} {APP_VERSION}"
 EXT = ".katalog"
 ARCHIVE_DIR = "Katalog archive"
@@ -672,9 +672,13 @@ class App(tk.Tk, _DnDBase):
             dark = bool(int(self.tk.call("tk::unsupported::MacWindowStyle", "isdark", self)))
         except (tk.TclError, ValueError):
             pass
-        if dark:
-            return {"pane": "#262626", "border": "#4e4e4e"}
-        return {"pane": "#f3f3f3", "border": "#b4b4b4"}
+        border = "#4e4e4e" if dark else "#b4b4b4"
+        try:
+            # macOS kreslí obsah záložek o stupeň tmavším odstínem okna – plocha kolem musí mít stejný
+            self.winfo_rgb("systemWindowBackgroundColor1")
+            return {"pane": "systemWindowBackgroundColor1", "border": border}
+        except tk.TclError:
+            return {"pane": "#262626" if dark else "#f3f3f3", "border": border}
 
     def _apply_style(self):
         c = self.colors = self._palette()
@@ -772,8 +776,11 @@ class App(tk.Tk, _DnDBase):
         put("l", left, top, 1, bottom - top + 1)
         put("r", right, top, 1, bottom - top + 1)
         put("b", left, bottom, right - left + 1, 1)
-        for f in ov.values():                                   # pod obsah záložek
-            f.lower()
+        # pořadí vrstev zdola: výplň → linky → obsah záložek
+        for k in ("tl", "tr", "l", "r", "b"):
+            ov[k].lower()
+        for k in ("fill", "shl", "shr"):
+            ov[k].lower()
 
     def _build_ui(self):
         self._apply_style()
