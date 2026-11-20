@@ -1,5 +1,8 @@
 # Historie verzí
 
+## 1.22
+- Oprava: rámeček tlačítek záložek se vždy vykreslí celý (ztmavená plocha a linka do něj už nezasahují).
+
 ## 1.21
 - Odstraněn tmavší pruh mezi linkou a obsahem záložek (plocha má přesně odstín obsahu).
 - Zaoblené rohy tenké linky kolem plochy záložek.

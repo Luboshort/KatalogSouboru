@@ -43,7 +43,7 @@ except Exception:
     _DnDBase = object
 
 APP_NAME = "Katalog souborů"
-APP_VERSION = "1.21"
+APP_VERSION = "1.22"
 APP_TITLE = f"{APP_NAME} {APP_VERSION}"
 EXT = ".katalog"
 ARCHIVE_DIR = "Katalog archive"
@@ -751,13 +751,18 @@ class App(tk.Tk, _DnDBase):
             return None
         hx, hy = hit
         xs = [x for x in range(0, w, 2) if on_tab(x, hy)]
+        x1, x2 = min(xs), max(xs)
+        while x1 > 0 and on_tab(x1 - 1, hy):                     # zpřesnit okraje po 1 px
+            x1 -= 1
+        while x2 < w - 1 and on_tab(x2 + 1, hy):
+            x2 += 1
         y1 = hy
         while y1 > 0 and on_tab(hx, y1 - 1):
             y1 -= 1
         y2 = hy
         while y2 < 120 and on_tab(hx, y2 + 1):
             y2 += 1
-        return min(xs), y1, max(xs), y2
+        return x1, y1, x2, y2
 
     def _layout_outline(self):
         self._ov_after = None
@@ -779,6 +784,8 @@ class App(tk.Tk, _DnDBase):
         if tabs:
             tx1, ty1, tx2, ty2 = tabs
             top, tab_bottom = (ty1 + ty2) // 2, ty2 + 1
+            gap = 3                                             # nezasahovat do okraje tlačítek záložek
+            tx1, tx2 = tx1 - gap, tx2 + gap
         else:
             tx1 = tx2 = None
             top = tab_bottom = max(0, cy - inset)
