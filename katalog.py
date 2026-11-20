@@ -43,7 +43,7 @@ except Exception:
     _DnDBase = object
 
 APP_NAME = "Katalog souborů"
-APP_VERSION = "1.20"
+APP_VERSION = "1.21"
 APP_TITLE = f"{APP_NAME} {APP_VERSION}"
 EXT = ".katalog"
 ARCHIVE_DIR = "Katalog archive"
@@ -672,13 +672,18 @@ class App(tk.Tk, _DnDBase):
             dark = bool(int(self.tk.call("tk::unsupported::MacWindowStyle", "isdark", self)))
         except (tk.TclError, ValueError):
             pass
-        border = "#4e4e4e" if dark else "#b4b4b4"
-        try:
-            # macOS kreslí obsah záložek o stupeň tmavším odstínem okna – plocha kolem musí mít stejný
-            self.winfo_rgb("systemWindowBackgroundColor1")
-            return {"pane": "systemWindowBackgroundColor1", "border": border}
-        except tk.TclError:
-            return {"pane": "#262626" if dark else "#f3f3f3", "border": border}
+        # „pane“ = přesně odstín, kterým macOS kreslí obsah záložek (změřeno: 250 při bílém okně),
+        # jinak vznikne kolem obsahu tmavší pruh; „win“ = pozadí okna vně linky (do zaoblených rohů)
+        if dark:
+            def sysc(name, fallback):
+                try:
+                    self.winfo_rgb(name)
+                    return name
+                except tk.TclError:
+                    return fallback
+            return {"pane": sysc("systemWindowBackgroundColor1", "#262626"),
+                    "win": sysc("systemWindowBackgroundColor", "#1e1e1e"), "border": "#4e4e4e"}
+        return {"pane": "#fafafa", "win": "#ffffff", "border": "#b4b4b4"}
 
     def _apply_style(self):
         c = self.colors = self._palette()
@@ -706,9 +711,25 @@ class App(tk.Tk, _DnDBase):
             self._ov[k] = tk.Frame(nb, bg=c["pane"], bd=0, highlightthickness=0)
         for k in ("tl", "tr", "l", "r", "b"):                     # linky: nahoře vlevo/vpravo od záložek, boky, dole
             self._ov[k] = tk.Frame(nb, bg=c["border"], bd=0, highlightthickness=0)
+        self._radius = 8                                          # zaoblené rohy linky
+        for k in ("cTL", "cTR", "cBL", "cBR"):
+            self._ov[k] = tk.Canvas(nb, width=self._radius, height=self._radius, bg=c["win"],
+                                    bd=0, highlightthickness=0)
+        self._draw_corners()
         self._ov_after = None
         nb.bind("<Configure>", self._schedule_outline, add="+")
         nb.bind("<<NotebookTabChanged>>", self._schedule_outline, add="+")
+
+    def _draw_corners(self):
+        """Zaoblené rohy: čtvrtkruh ve výplni plochy + oblouk v barvě linky, vně barva okna."""
+        c, r = self.colors, self._radius
+        d = 2 * r
+        for k, box, start in (("cTL", (0, 0, d, d), 90), ("cTR", (-r - 1, 0, r - 1, d), 0),
+                              ("cBL", (0, -r - 1, d, r - 1), 180), ("cBR", (-r - 1, -r - 1, r - 1, r - 1), 270)):
+            cv = self._ov[k]
+            cv.delete("all")
+            cv.create_arc(*box, start=start, extent=90, style="pieslice", fill=c["pane"], outline="")
+            cv.create_arc(*box, start=start, extent=90, style="arc", outline=c["border"], width=1)
 
     def _schedule_outline(self, _e=None):
         if self._ov_after:
@@ -750,9 +771,11 @@ class App(tk.Tk, _DnDBase):
         if W < 50 or cw < 10:
             return
         tabs = self._tab_row()
-        inset = max(0, cx // 2)                                 # linka napůl mezi okrajem a obsahem
+        r = self._radius
+        # linka napůl mezi okrajem a obsahem, ale aspoň o poloměr rohu od obsahu (aby roh nic nezakryl)
+        inset = max(0, min(cx // 2, cx - r - 2))
         left, right = inset, W - inset - 1
-        bottom = min(H - 1, cy + ch + max(0, (H - cy - ch)) // 2)
+        bottom = min(H - 1, cy + ch + max(r + 1, (H - cy - ch) // 2))
         if tabs:
             tx1, ty1, tx2, ty2 = tabs
             top, tab_bottom = (ty1 + ty2) // 2, ty2 + 1
@@ -768,19 +791,23 @@ class App(tk.Tk, _DnDBase):
         if tabs:
             put("shl", left, top, tx1 - left, tab_bottom - top)
             put("shr", tx2 + 1, top, right - tx2, tab_bottom - top)
-            put("tl", left, top, tx1 - left, 1)
-            put("tr", tx2 + 1, top, right - tx2, 1)
+            put("tl", left + r, top, tx1 - left - r, 1)
+            put("tr", tx2 + 1, top, right - tx2 - r, 1)
         else:
-            put("shl", 0, 0, 0, 0); put("shr", 0, 0, 0, 0)
-            put("tl", left, top, right - left + 1, 1); put("tr", 0, 0, 0, 0)
-        put("l", left, top, 1, bottom - top + 1)
-        put("r", right, top, 1, bottom - top + 1)
-        put("b", left, bottom, right - left + 1, 1)
-        # pořadí vrstev zdola: výplň → linky → obsah záložek
-        for k in ("tl", "tr", "l", "r", "b"):
-            ov[k].lower()
-        for k in ("fill", "shl", "shr"):
-            ov[k].lower()
+            put("shl", 0, 0, 0, 0)
+            put("shr", 0, 0, 0, 0)
+            put("tl", left + r, top, right - left + 1 - 2 * r, 1)
+            put("tr", 0, 0, 0, 0)
+        put("l", left, top + r, 1, bottom - top + 1 - 2 * r)
+        put("r", right, top + r, 1, bottom - top + 1 - 2 * r)
+        put("b", left + r, bottom, right - left + 1 - 2 * r, 1)
+        put("cTL", left, top, r, r)
+        put("cTR", right - r + 1, top, r, r)
+        put("cBL", left, bottom - r + 1, r, r)
+        put("cBR", right - r + 1, bottom - r + 1, r, r)
+        # pořadí vrstev zdola: výplň → linky a rohy → obsah záložek
+        for k in ("tl", "tr", "l", "r", "b", "cTL", "cTR", "cBL", "cBR", "fill", "shl", "shr"):
+            self.tk.call("lower", ov[k]._w)        # (u Canvas je .lower() něco jiného – proto přímo Tk)
 
     def _build_ui(self):
         self._apply_style()

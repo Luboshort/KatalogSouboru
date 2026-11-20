@@ -1,5 +1,9 @@
 # Historie verzí
 
+## 1.21
+- Odstraněn tmavší pruh mezi linkou a obsahem záložek (plocha má přesně odstín obsahu).
+- Zaoblené rohy tenké linky kolem plochy záložek.
+
 ## 1.20
 - Oprava: tenká linka kolem plochy záložek je vidět (byla zakrytá výplní).
 - Oprava: zmizel tmavší pruh kolem obsahu záložek – plocha má jednotný systémový odstín macOS.
