@@ -43,7 +43,7 @@ except Exception:
     _DnDBase = object
 
 APP_NAME = "Katalog souborů"
-APP_VERSION = "1.18"
+APP_VERSION = "1.19"
 APP_TITLE = f"{APP_NAME} {APP_VERSION}"
 EXT = ".katalog"
 ARCHIVE_DIR = "Katalog archive"
@@ -694,26 +694,102 @@ class App(tk.Tk, _DnDBase):
                     pass
             self._pane_style(child)
 
-    def _bordered(self, parent, bg):
-        """Rámeček o síle 1 px (tk.Frame se zvýrazněním okraje – vypadá stejně na všech systémech)."""
-        c = self.colors
-        return tk.Frame(parent, bg=bg, bd=0, highlightthickness=1,
-                        highlightbackground=c["border"], highlightcolor=c["border"])
+    # ---------- ztmavená plocha záložek s linkou po okraji (linka prochází středem záložek)
+    def _build_pane_outline(self):
+        c, nb = self.colors, self.nb
+        self._ov = {}
+        for k in ("fill", "shl", "shr"):                          # výplň plochy a „ramena“ vedle záložek
+            self._ov[k] = tk.Frame(nb, bg=c["pane"], bd=0, highlightthickness=0)
+        for k in ("tl", "tr", "l", "r", "b"):                     # linky: nahoře vlevo/vpravo od záložek, boky, dole
+            self._ov[k] = tk.Frame(nb, bg=c["border"], bd=0, highlightthickness=0)
+        self._ov_after = None
+        nb.bind("<Configure>", self._schedule_outline, add="+")
+        nb.bind("<<NotebookTabChanged>>", self._schedule_outline, add="+")
+
+    def _schedule_outline(self, _e=None):
+        if self._ov_after:
+            self.after_cancel(self._ov_after)
+        self._ov_after = self.after(30, self._layout_outline)
+
+    def _tab_row(self):
+        """Poloha řady záložek (x1, y1, x2, y2) – zjištěná dotazem, kde notebook má záložky."""
+        nb = self.nb
+        w = nb.winfo_width()
+
+        def on_tab(x, y):
+            try:
+                return str(nb.index(f"@{x},{y}")) != ""
+            except tk.TclError:
+                return False
+        hit = next(((x, y) for y in range(0, 80, 2) for x in range(0, w, 6) if on_tab(x, y)), None)
+        if not hit:
+            return None
+        hx, hy = hit
+        xs = [x for x in range(0, w, 2) if on_tab(x, hy)]
+        y1 = hy
+        while y1 > 0 and on_tab(hx, y1 - 1):
+            y1 -= 1
+        y2 = hy
+        while y2 < 120 and on_tab(hx, y2 + 1):
+            y2 += 1
+        return min(xs), y1, max(xs), y2
+
+    def _layout_outline(self):
+        self._ov_after = None
+        nb, ov = self.nb, self._ov
+        try:
+            cur = nb.nametowidget(nb.select())
+        except (tk.TclError, KeyError):
+            return
+        W, H = nb.winfo_width(), nb.winfo_height()
+        cx, cy, cw, ch = cur.winfo_x(), cur.winfo_y(), cur.winfo_width(), cur.winfo_height()
+        if W < 50 or cw < 10:
+            return
+        tabs = self._tab_row()
+        inset = max(0, cx // 2)                                 # linka napůl mezi okrajem a obsahem
+        left, right = inset, W - inset - 1
+        bottom = min(H - 1, cy + ch + max(0, (H - cy - ch)) // 2)
+        if tabs:
+            tx1, ty1, tx2, ty2 = tabs
+            top, tab_bottom = (ty1 + ty2) // 2, ty2 + 1
+        else:
+            tx1 = tx2 = None
+            top = tab_bottom = max(0, cy - inset)
+        def put(k, x, y, w, h):
+            if w > 0 and h > 0:
+                ov[k].place(x=x, y=y, width=w, height=h)
+            else:
+                ov[k].place_forget()
+        put("fill", left, tab_bottom, right - left + 1, bottom - tab_bottom + 1)
+        if tabs:
+            put("shl", left, top, tx1 - left, tab_bottom - top)
+            put("shr", tx2 + 1, top, right - tx2, tab_bottom - top)
+            put("tl", left, top, tx1 - left, 1)
+            put("tr", tx2 + 1, top, right - tx2, 1)
+        else:
+            put("shl", 0, 0, 0, 0); put("shr", 0, 0, 0, 0)
+            put("tl", left, top, right - left + 1, 1); put("tr", 0, 0, 0, 0)
+        put("l", left, top, 1, bottom - top + 1)
+        put("r", right, top, 1, bottom - top + 1)
+        put("b", left, bottom, right - left + 1, 1)
+        for f in ov.values():                                   # pod obsah záložek
+            f.lower()
 
     def _build_ui(self):
         self._apply_style()
         self._build_update_bar()
         self.nb = ttk.Notebook(self)
         self.nb.pack(fill="both", expand=True, padx=8, pady=8)
-        # každá záložka = ztmavená plocha s tenkým rámečkem, obsah uvnitř s okrajem 10 px
-        self.tab_search = self._bordered(self.nb, self.colors["pane"])
-        self.tab_scan = self._bordered(self.nb, self.colors["pane"])
+        # obsah záložek na ztmavené ploše; linka vede po vnějším okraji plochy a středem záložek
+        self.tab_search = tk.Frame(self.nb, bg=self.colors["pane"], bd=0, highlightthickness=0)
+        self.tab_scan = tk.Frame(self.nb, bg=self.colors["pane"], bd=0, highlightthickness=0)
         self.nb.add(self.tab_search, text="  Hledat v katalogu  ")
         self.nb.add(self.tab_scan, text="  Vytvořit katalog  ")
         self._build_scan_tab()
         self._build_search_tab()
         self._pane_style(self.tab_search)
         self._pane_style(self.tab_scan)
+        self._build_pane_outline()
 
 
         # spodní lišta – stejná na všech záložkách: stav vlevo, verze a aktualizace vpravo
@@ -848,11 +924,11 @@ class App(tk.Tk, _DnDBase):
             list_bg = "systemTextBackgroundColor"
         except tk.TclError:
             list_bg = "white"
-        tf = self._bordered(self.split, list_bg)                 # linka kolem výpisu i posuvníků
+        tf = tk.Frame(self.split, bg=list_bg, bd=0, highlightthickness=0)   # linka kolem výpisu i posuvníků
         self.split.add(tf, weight=3)
         self._build_preview_pane()
-        tf.rowconfigure(0, weight=1)
-        tf.columnconfigure(0, weight=1)
+        tf.rowconfigure(1, weight=1)
+        tf.columnconfigure(1, weight=1)
         self.tree = ttk.Treeview(tf, columns=list(COLUMNS), show="headings", selectmode="extended")
         for col, (title, width, stretch) in COLUMNS.items():
             self.tree.heading(col, text=title, anchor="w", command=lambda c=col: self.sort_by(c))
@@ -861,9 +937,16 @@ class App(tk.Tk, _DnDBase):
         ys = ttk.Scrollbar(tf, orient="vertical", command=self.tree.yview)
         xs = ttk.Scrollbar(tf, orient="horizontal", command=self.tree.xview)
         self.tree.configure(yscrollcommand=ys.set, xscrollcommand=xs.set)
-        self.tree.grid(row=0, column=0, sticky="nsew")
-        ys.grid(row=0, column=1, sticky="ns")
-        xs.grid(row=1, column=0, sticky="ew")
+        # linky: horní jen nad posuvníkem (nad sloupci kreslí čáru záhlaví – jinak by byla dvojitá)
+        def line(**kw):
+            return tk.Frame(tf, bg=self.colors["border"], bd=0, highlightthickness=0, **kw)
+        line(height=1).grid(row=0, column=2, sticky="ew")
+        line(width=1).grid(row=0, column=0, rowspan=4, sticky="ns")
+        line(width=1).grid(row=0, column=3, rowspan=4, sticky="ns")
+        line(height=1).grid(row=3, column=0, columnspan=4, sticky="ew")
+        self.tree.grid(row=0, column=1, rowspan=2, sticky="nsew")
+        ys.grid(row=1, column=2, sticky="ns")
+        xs.grid(row=2, column=1, sticky="ew")
         self.tree.heading("#0", text="Název", anchor="w", command=lambda: self.sort_by("name"))
         self.tree.column("#0", width=420, minwidth=150, stretch=True)
         bold = tkfont.nametofont("TkDefaultFont").copy()

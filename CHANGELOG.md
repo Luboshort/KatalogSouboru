@@ -1,5 +1,9 @@
 # Historie verzí
 
+## 1.19
+- Linka kolem plochy záložek vede po jejím vnějším okraji a nahoře středem záložek; ztmavená je celá plocha až k lince.
+- Odstraněna dvojitá linka nad výpisem (nad sloupci zůstává jen čára záhlaví).
+
 ## 1.18
 - Vzhled okna vrácen jako ve verzi 1.16. Přidána jen jemně ztmavená plocha záložek, tenká linka kolem ní a tenká linka kolem výpisu s posuvníky.
 
