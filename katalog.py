@@ -43,7 +43,7 @@ except Exception:
     _DnDBase = object
 
 APP_NAME = "Katalog souborů"
-APP_VERSION = "1.17"
+APP_VERSION = "1.18"
 APP_TITLE = f"{APP_NAME} {APP_VERSION}"
 EXT = ".katalog"
 ARCHIVE_DIR = "Katalog archive"
@@ -666,28 +666,33 @@ class App(tk.Tk, _DnDBase):
 
     # ---------- UI
     def _palette(self):
-        """Barvy: bílé okno, ztmavená plocha uvnitř záložek, tenké šedé rámečky (tmavý režim zvlášť)."""
+        """Barvy: trochu ztmavená plocha uvnitř záložek a tenké šedé linky (tmavý režim zvlášť)."""
         dark = False
         try:
             dark = bool(int(self.tk.call("tk::unsupported::MacWindowStyle", "isdark", self)))
         except (tk.TclError, ValueError):
             pass
         if dark:
-            return {"win": "#1e1e1e", "pane": "#2a2a2a", "border": "#4e4e4e", "list": "#1e1e1e"}
-        return {"win": "#ffffff", "pane": "#f3f3f3", "border": "#b4b4b4", "list": "#ffffff"}
+            return {"pane": "#262626", "border": "#4e4e4e"}
+        return {"pane": "#f3f3f3", "border": "#b4b4b4"}
 
     def _apply_style(self):
         c = self.colors = self._palette()
         st = ttk.Style(self)
-        self.configure(bg=c["win"])
         for name in ("TFrame", "TLabel", "TCheckbutton", "TRadiobutton", "TPanedwindow"):
-            st.configure(name, background=c["pane"])
-        st.configure("Win.TFrame", background=c["win"])
-        st.configure("Win.TLabel", background=c["win"])
-        st.configure("TNotebook", background=c["win"])
-        # seznam bez vlastního okraje – rámeček kreslí obal kolem seznamu i posuvníku
-        st.layout("Treeview", [("Treeview.treearea", {"sticky": "nswe"})])
-        st.configure("Treeview", background=c["list"], fieldbackground=c["list"], borderwidth=0)
+            st.configure("Pane." + name, background=c["pane"])
+
+    def _pane_style(self, widget):
+        """Widgetům uvnitř záložek nastaví ztmavené pozadí plochy (ostatní vzhled zůstává)."""
+        for child in widget.winfo_children():
+            cls = child.winfo_class()
+            if cls in ("TFrame", "TLabel", "TCheckbutton", "TRadiobutton", "TPanedwindow"):
+                try:
+                    if not str(child.cget("style")):
+                        child.configure(style="Pane." + cls)
+                except tk.TclError:
+                    pass
+            self._pane_style(child)
 
     def _bordered(self, parent, bg):
         """Rámeček o síle 1 px (tk.Frame se zvýrazněním okraje – vypadá stejně na všech systémech)."""
@@ -707,19 +712,19 @@ class App(tk.Tk, _DnDBase):
         self.nb.add(self.tab_scan, text="  Vytvořit katalog  ")
         self._build_scan_tab()
         self._build_search_tab()
+        self._pane_style(self.tab_search)
+        self._pane_style(self.tab_scan)
 
 
         # spodní lišta – stejná na všech záložkách: stav vlevo, verze a aktualizace vpravo
         self.status = tk.StringVar(value="Připraveno.")
-        bar = ttk.Frame(self, padding=(10, 2, 10, 6), style="Win.TFrame")
+        bar = ttk.Frame(self, padding=(10, 2, 10, 6))
         bar.pack(side="bottom", fill="x", before=self.nb)     # při zmenšení okna zůstane vidět
         ttk.Separator(self).pack(side="bottom", fill="x", before=self.nb)   # čára nad lištou
         ttk.Button(bar, text="Zkontrolovat aktualizace",
                    command=lambda: self.check_updates(manual=True)).pack(side="right")
-        ttk.Label(bar, text=f"verze {APP_VERSION}", foreground="gray",
-                  style="Win.TLabel").pack(side="right", padx=(10, 8))
-        ttk.Label(bar, textvariable=self.status, anchor="w",
-                  style="Win.TLabel").pack(side="left", fill="x", expand=True)
+        ttk.Label(bar, text=f"verze {APP_VERSION}", foreground="gray").pack(side="right", padx=(10, 8))
+        ttk.Label(bar, textvariable=self.status, anchor="w").pack(side="left", fill="x", expand=True)
 
     def _build_scan_tab(self):
         t = ttk.Frame(self.tab_scan, padding=10)
@@ -729,12 +734,9 @@ class App(tk.Tk, _DnDBase):
 
         box = ttk.Frame(t)
         box.pack(fill="both", expand=True, pady=(4, 6))
-        lf = self._bordered(box, self.colors["list"])           # rámeček kolem seznamu i posuvníku
-        lf.pack(side="left", fill="both", expand=True)
-        self.folder_list = tk.Listbox(lf, height=8, selectmode="extended", activestyle="none", bd=0,
-                                      bg=self.colors["list"], highlightthickness=0)
+        self.folder_list = tk.Listbox(box, height=8, selectmode="extended", activestyle="none")
         self.folder_list.pack(side="left", fill="both", expand=True)
-        sb = ttk.Scrollbar(lf, orient="vertical", command=self.folder_list.yview)
+        sb = ttk.Scrollbar(box, orient="vertical", command=self.folder_list.yview)
         sb.pack(side="left", fill="y")
         self.folder_list.configure(yscrollcommand=sb.set)
 
@@ -841,7 +843,12 @@ class App(tk.Tk, _DnDBase):
 
         self.split = ttk.PanedWindow(t, orient="horizontal")
         self.split.pack(fill="both", expand=True)
-        tf = self._bordered(self.split, self.colors["list"])     # rámeček kolem výpisu i posuvníků
+        try:                                                     # barva pozadí seznamu (i v tmavém režimu)
+            self.winfo_rgb("systemTextBackgroundColor")
+            list_bg = "systemTextBackgroundColor"
+        except tk.TclError:
+            list_bg = "white"
+        tf = self._bordered(self.split, list_bg)                 # linka kolem výpisu i posuvníků
         self.split.add(tf, weight=3)
         self._build_preview_pane()
         tf.rowconfigure(0, weight=1)

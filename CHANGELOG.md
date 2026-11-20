@@ -1,5 +1,8 @@
 # Historie verzí
 
+## 1.18
+- Vzhled okna vrácen jako ve verzi 1.16. Přidána jen jemně ztmavená plocha záložek, tenká linka kolem ní a tenká linka kolem výpisu s posuvníky.
+
 ## 1.17
 - Místo „Aktuální před…“ se ukazuje „Vytvořeno před …“: hodinami (do 24 h), dny (1–6), týdny (1–4), měsíci, lety. Barvy zůstávají (zeleně 0–3 dny, oranžově 4–6, červeně 7+).
 - Nový vzhled: bílé okno, ztmavená plocha záložek s tenkým rámečkem, rámeček kolem výpisu i posuvníků.
