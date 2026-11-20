@@ -43,7 +43,7 @@ except Exception:
     _DnDBase = object
 
 APP_NAME = "Katalog souborů"
-APP_VERSION = "1.16"
+APP_VERSION = "1.17"
 APP_TITLE = f"{APP_NAME} {APP_VERSION}"
 EXT = ".katalog"
 ARCHIVE_DIR = "Katalog archive"
@@ -194,6 +194,27 @@ def fmt_dur(sec):
         return f"{round(sec / 60)} min"
     h, m = divmod(round(sec / 60), 60)
     return f"{h} h {m} min" if m else f"{h} h"
+
+
+def age_text(seconds):
+    """Kolik je to času: „před 5 hodinami“, „před 3 dny“, „před 2 týdny“, „před 4 měsíci“, „před 2 lety“."""
+    h = max(0, seconds) / 3600
+    if h < 1:
+        return "před méně než hodinou"
+    if h < 24:
+        n = int(h)
+        return "před 1 hodinou" if n == 1 else f"před {n} hodinami"
+    d = int(h // 24)
+    if d < 7:
+        return "před 1 dnem" if d == 1 else f"před {d} dny"
+    if d < 35:
+        w = d // 7
+        return "před 1 týdnem" if w == 1 else f"před {w} týdny"
+    if d < 365:
+        m = d // 30
+        return "před 1 měsícem" if m == 1 else f"před {m} měsíci"
+    y = d // 365
+    return "před 1 rokem" if y == 1 else f"před {y} lety"
 
 
 def version_tuple(v):
@@ -644,12 +665,44 @@ class App(tk.Tk, _DnDBase):
             self.nb.select(self.tab_scan)
 
     # ---------- UI
+    def _palette(self):
+        """Barvy: bílé okno, ztmavená plocha uvnitř záložek, tenké šedé rámečky (tmavý režim zvlášť)."""
+        dark = False
+        try:
+            dark = bool(int(self.tk.call("tk::unsupported::MacWindowStyle", "isdark", self)))
+        except (tk.TclError, ValueError):
+            pass
+        if dark:
+            return {"win": "#1e1e1e", "pane": "#2a2a2a", "border": "#4e4e4e", "list": "#1e1e1e"}
+        return {"win": "#ffffff", "pane": "#f3f3f3", "border": "#b4b4b4", "list": "#ffffff"}
+
+    def _apply_style(self):
+        c = self.colors = self._palette()
+        st = ttk.Style(self)
+        self.configure(bg=c["win"])
+        for name in ("TFrame", "TLabel", "TCheckbutton", "TRadiobutton", "TPanedwindow"):
+            st.configure(name, background=c["pane"])
+        st.configure("Win.TFrame", background=c["win"])
+        st.configure("Win.TLabel", background=c["win"])
+        st.configure("TNotebook", background=c["win"])
+        # seznam bez vlastního okraje – rámeček kreslí obal kolem seznamu i posuvníku
+        st.layout("Treeview", [("Treeview.treearea", {"sticky": "nswe"})])
+        st.configure("Treeview", background=c["list"], fieldbackground=c["list"], borderwidth=0)
+
+    def _bordered(self, parent, bg):
+        """Rámeček o síle 1 px (tk.Frame se zvýrazněním okraje – vypadá stejně na všech systémech)."""
+        c = self.colors
+        return tk.Frame(parent, bg=bg, bd=0, highlightthickness=1,
+                        highlightbackground=c["border"], highlightcolor=c["border"])
+
     def _build_ui(self):
+        self._apply_style()
         self._build_update_bar()
         self.nb = ttk.Notebook(self)
         self.nb.pack(fill="both", expand=True, padx=8, pady=8)
-        self.tab_search = ttk.Frame(self.nb, padding=10)
-        self.tab_scan = ttk.Frame(self.nb, padding=10)
+        # každá záložka = ztmavená plocha s tenkým rámečkem, obsah uvnitř s okrajem 10 px
+        self.tab_search = self._bordered(self.nb, self.colors["pane"])
+        self.tab_scan = self._bordered(self.nb, self.colors["pane"])
         self.nb.add(self.tab_search, text="  Hledat v katalogu  ")
         self.nb.add(self.tab_scan, text="  Vytvořit katalog  ")
         self._build_scan_tab()
@@ -658,24 +711,30 @@ class App(tk.Tk, _DnDBase):
 
         # spodní lišta – stejná na všech záložkách: stav vlevo, verze a aktualizace vpravo
         self.status = tk.StringVar(value="Připraveno.")
-        bar = ttk.Frame(self, padding=(10, 2, 10, 6))
+        bar = ttk.Frame(self, padding=(10, 2, 10, 6), style="Win.TFrame")
         bar.pack(side="bottom", fill="x", before=self.nb)     # při zmenšení okna zůstane vidět
         ttk.Separator(self).pack(side="bottom", fill="x", before=self.nb)   # čára nad lištou
         ttk.Button(bar, text="Zkontrolovat aktualizace",
                    command=lambda: self.check_updates(manual=True)).pack(side="right")
-        ttk.Label(bar, text=f"verze {APP_VERSION}", foreground="gray").pack(side="right", padx=(10, 8))
-        ttk.Label(bar, textvariable=self.status, anchor="w").pack(side="left", fill="x", expand=True)
+        ttk.Label(bar, text=f"verze {APP_VERSION}", foreground="gray",
+                  style="Win.TLabel").pack(side="right", padx=(10, 8))
+        ttk.Label(bar, textvariable=self.status, anchor="w",
+                  style="Win.TLabel").pack(side="left", fill="x", expand=True)
 
     def _build_scan_tab(self):
-        t = self.tab_scan
+        t = ttk.Frame(self.tab_scan, padding=10)
+        t.pack(fill="both", expand=True)
         ttk.Label(t, text="Složky, které se zařadí do katalogu – přidej je tlačítkem nebo přetáhni "
                           "myší z Finderu sem do okna (případně na ikonu aplikace v Docku):").pack(anchor="w")
 
         box = ttk.Frame(t)
         box.pack(fill="both", expand=True, pady=(4, 6))
-        self.folder_list = tk.Listbox(box, height=8, selectmode="extended", activestyle="none")
+        lf = self._bordered(box, self.colors["list"])           # rámeček kolem seznamu i posuvníku
+        lf.pack(side="left", fill="both", expand=True)
+        self.folder_list = tk.Listbox(lf, height=8, selectmode="extended", activestyle="none", bd=0,
+                                      bg=self.colors["list"], highlightthickness=0)
         self.folder_list.pack(side="left", fill="both", expand=True)
-        sb = ttk.Scrollbar(box, orient="vertical", command=self.folder_list.yview)
+        sb = ttk.Scrollbar(lf, orient="vertical", command=self.folder_list.yview)
         sb.pack(side="left", fill="y")
         self.folder_list.configure(yscrollcommand=sb.set)
 
@@ -718,7 +777,8 @@ class App(tk.Tk, _DnDBase):
                       ).pack(side="left")
 
     def _build_search_tab(self):
-        t = self.tab_search
+        t = ttk.Frame(self.tab_search, padding=10)
+        t.pack(fill="both", expand=True)
 
         top = ttk.Frame(t)
         top.pack(fill="x")
@@ -781,7 +841,7 @@ class App(tk.Tk, _DnDBase):
 
         self.split = ttk.PanedWindow(t, orient="horizontal")
         self.split.pack(fill="both", expand=True)
-        tf = ttk.Frame(self.split)
+        tf = self._bordered(self.split, self.colors["list"])     # rámeček kolem výpisu i posuvníků
         self.split.add(tf, weight=3)
         self._build_preview_pane()
         tf.rowconfigure(0, weight=1)
@@ -1081,23 +1141,19 @@ class App(tk.Tk, _DnDBase):
         threading.Thread(target=worker, daemon=True).start()
 
     def _update_age(self):
-        """„Aktuální před X dny“ – zeleně 0–3 dny, oranžově 4–6, červeně 7 a více."""
+        """„Vytvořeno před …“ – zeleně 0–3 dny, oranžově 4–6, červeně 7 a více."""
         if getattr(self, "_age_after", None):
             self.after_cancel(self._age_after)
             self._age_after = None
         if not self.catalog:
             self.cat_age.configure(text="")
             return
-        days = max(0, int((time.time() - self.catalog.created) // 86400))
-        if days == 0:
-            txt = "Aktuální dnes"
-        elif days == 1:
-            txt = "Aktuální před 1 dnem"
-        else:
-            txt = f"Aktuální před {days} dny"
+        age = time.time() - self.catalog.created
+        days = max(0, int(age // 86400))
+        txt = "Vytvořeno " + age_text(age)
         color = "#2e9d3a" if days <= 3 else ("#e67e00" if days <= 6 else "#d0021b")
         self.cat_age.configure(text=txt, foreground=color)
-        self._age_after = self.after(30 * 60 * 1000, self._update_age)   # obnovit každou půlhodinu
+        self._age_after = self.after(5 * 60 * 1000, self._update_age)    # obnovit každých 5 minut
 
     def _load_progress(self, pct, txt):
         self.load_bar["value"] = pct

@@ -1,5 +1,9 @@
 # Historie verzí
 
+## 1.17
+- Místo „Aktuální před…“ se ukazuje „Vytvořeno před …“: hodinami (do 24 h), dny (1–6), týdny (1–4), měsíci, lety. Barvy zůstávají (zeleně 0–3 dny, oranžově 4–6, červeně 7+).
+- Nový vzhled: bílé okno, ztmavená plocha záložek s tenkým rámečkem, rámeček kolem výpisu i posuvníků.
+
 ## 1.16
 - Aktualizace jedním klikem: aplikace sama nabídne novou verzi, po „Ano“ ji stáhne, nainstaluje a restartuje se bez dalších dotazů.
 - Během skenování nebo načítání katalogu nabídka počká, až práce doběhne.
