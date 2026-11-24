@@ -24,6 +24,7 @@ ji často nejde ani povolit. Soubor stažený z Terminálu tuto značku nedostan
 - Aktualizace katalogu se zálohou předchozí verze do složky `Katalog archive`.
 - Volitelně (chráněno heslem): automatická aktualizace otevřeného katalogu při spuštění mezi 8 a 9 h.
 - Zvládá katalogy s miliony položek.
+- Po zavření okna běží dál na pozadí (okno znovu: ikona v Docku nebo Soubor › Nové okno, ukončení ⌘Q).
 - Sama upozorní, když je na GitHubu nová verze.
 
 Pro Macy s procesorem Apple (M1 a novější), macOS 26 Tahoe.
@@ -33,7 +34,7 @@ Pro Macy s procesorem Apple (M1 a novější), macOS 26 Tahoe.
 Aplikace při spuštění (a pak jednou denně) zkontroluje GitHub. Když je k dispozici nová verze, zeptá se,
 jestli ji nainstalovat – po **Ano** ji sama stáhne, ověří, nainstaluje a restartuje se. Když zrovna běží
 skenování, zeptá se, až doběhne. Po **Ne** zůstane nahoře žlutý pruh s tlačítkem pro pozdější instalaci.
-Ručně: **Zkontrolovat aktualizace** vpravo ve spodní liště okna.
+Ručně: menu **KatalogSouboru › Zkontrolovat aktualizace…**.
 
 ## Sestavení ze zdrojových kódů
 

@@ -1,5 +1,11 @@
 # Historie verzí
 
+## 1.24
+- Zavřením okna aplikace neskončí – běží dál na pozadí (ikona zůstává v Docku). Okno znovu otevře kliknutí na ikonu v Docku nebo menu Soubor › Nové okno (⌘N). Úplně ukončit: ⌘Q.
+- Když aktualizace katalogu doběhne při zavřeném okně, macOS ukáže upozornění.
+- „Zkontrolovat aktualizace…“ je v menu aplikace (KatalogSouboru › Zkontrolovat aktualizace…); tlačítko ve spodní liště odstraněno.
+- Nabídka nové verze počká, až bude okno otevřené.
+
 ## 1.23
 - Ve spodní liště volba „Automaticky updatovat otevřený katalog“ (výchozí vypnuto, nastavení se pamatuje, zapnutí chráněné heslem).
 - Když je zapnutá a aplikace se spustí mezi 8:00 a 9:00, otevřený katalog se sám aktualizuje bez dotazů, včetně zálohy do „Katalog archive“ – nejvýš jednou denně.

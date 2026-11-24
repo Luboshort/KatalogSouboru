@@ -43,7 +43,7 @@ except Exception:
     _DnDBase = object
 
 APP_NAME = "Katalog souborů"
-APP_VERSION = "1.23"
+APP_VERSION = "1.24"
 APP_TITLE = f"{APP_NAME} {APP_VERSION}"
 EXT = ".katalog"
 ARCHIVE_DIR = "Katalog archive"
@@ -343,6 +343,17 @@ fi
 open "${APP}"
 rm -rf "${WORK}"
 """
+
+
+def notify(title, text):
+    """Upozornění macOS (vpravo nahoře) – neblokuje; mimo Mac nedělá nic."""
+    def esc(x):
+        return x.replace("\\", "\\\\").replace('"', '\\"')
+    try:
+        subprocess.Popen(["osascript", "-e", f'display notification "{esc(text)}" with title "{esc(title)}"'],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError:
+        pass
 
 
 def load_settings():
@@ -663,7 +674,9 @@ class App(tk.Tk, _DnDBase):
         self.after(100, self._poll)
         self.after(4000, self._update_tick)
         self._after_update_notice()
-        self.protocol("WM_DELETE_WINDOW", self._on_close)
+        self._is_mac = self.tk.call("tk", "windowingsystem") == "aqua"
+        self.protocol("WM_DELETE_WINDOW", self._close_window)
+        self._build_menu()
 
         path = open_path or self.settings.get("last_catalog")
         if path and os.path.exists(path):
@@ -845,11 +858,9 @@ class App(tk.Tk, _DnDBase):
         bar = ttk.Frame(self, padding=(10, 2, 10, 6))
         bar.pack(side="bottom", fill="x", before=self.nb)     # při zmenšení okna zůstane vidět
         ttk.Separator(self).pack(side="bottom", fill="x", before=self.nb)   # čára nad lištou
-        ttk.Button(bar, text="Zkontrolovat aktualizace",
-                   command=lambda: self.check_updates(manual=True)).pack(side="right")
         self.var_auto_rescan = tk.BooleanVar(value=bool(self.settings.get("auto_rescan", False)))
         ttk.Checkbutton(bar, text="Automaticky updatovat otevřený katalog", variable=self.var_auto_rescan,
-                        command=self._toggle_auto_rescan).pack(side="right", padx=(10, 12))
+                        command=self._toggle_auto_rescan).pack(side="right", padx=(10, 0))
         ttk.Label(bar, text=f"verze {APP_VERSION}", foreground="gray").pack(side="right", padx=(10, 8))
         ttk.Label(bar, textvariable=self.status, anchor="w").pack(side="left", fill="x", expand=True)
 
@@ -1979,6 +1990,77 @@ class App(tk.Tk, _DnDBase):
                 self.tree.focus(iid)
             self.menu.tk_popup(e.x_root, e.y_root)
 
+    # ---------- menu, běh na pozadí se zavřeným oknem
+    def _build_menu(self):
+        mb = tk.Menu(self)
+        cmd = "Command" if self._is_mac else "Control"
+        acc = "Command-" if self._is_mac else "Ctrl+"          # na Macu se zobrazí jako ⌘
+        if self._is_mac:                       # aplikační menu (vlevo nahoře vedle )
+            app_menu = tk.Menu(mb, name="apple", tearoff=0)
+            app_menu.add_command(label="Zkontrolovat aktualizace…",
+                                 command=lambda: self.check_updates(manual=True))
+            app_menu.add_separator()
+            mb.add_cascade(menu=app_menu)
+        file_menu = tk.Menu(mb, tearoff=0)
+        file_menu.add_command(label="Nové okno", accelerator=f"{acc}N", command=self._show_window)
+        file_menu.add_command(label="Otevřít katalog…", accelerator=f"{acc}O",
+                              command=lambda: (self._show_window(), self.ask_open()))
+        file_menu.add_separator()
+        file_menu.add_command(label="Zavřít okno", accelerator=f"{acc}W", command=self._close_window)
+        if not self._is_mac:
+            file_menu.add_separator()
+            file_menu.add_command(label="Zkontrolovat aktualizace…",
+                                  command=lambda: self.check_updates(manual=True))
+            file_menu.add_command(label="Konec", command=self._quit)
+        mb.add_cascade(label="Soubor", menu=file_menu)
+        if self._is_mac:
+            mb.add_cascade(menu=tk.Menu(mb, name="window", tearoff=0))   # standardní menu Okno
+        self.config(menu=mb)
+        for key, fn in (("n", self._show_window), ("o", lambda: (self._show_window(), self.ask_open())),
+                        ("w", self._close_window)):
+            self.bind_all(f"<{cmd}-{key}>", lambda e, f=fn: (f(), "break")[1])
+        if self._is_mac:
+            try:
+                self.createcommand("::tk::mac::ReopenApplication", self._show_window)   # klik na ikonu v Docku
+                self.createcommand("::tk::mac::Quit", self._quit)                       # Cmd+Q
+            except tk.TclError:
+                pass
+
+    def _window_visible(self):
+        try:
+            return self.state() not in ("withdrawn", "iconic")
+        except tk.TclError:
+            return False
+
+    def _close_window(self, *_):
+        """Na Macu okno jen schová – aplikace dál běží (skenování, ranní aktualizace). Konec = Cmd+Q."""
+        if not self._is_mac:
+            self._quit()
+            return
+        self._ql_close()
+        self.withdraw()
+        if self.busy:
+            notify(APP_NAME, "Okno je zavřené, skenování běží dál. Okno ukážeš kliknutím na ikonu v Docku.")
+
+    def _show_window(self, *_):
+        self.deiconify()
+        self.lift()
+        try:
+            self.focus_force()
+        except tk.TclError:
+            pass
+        if getattr(self, "_offer_pending", False) and not self.busy:
+            self.after(600, self._offer_update)
+
+    def _quit(self, *_):
+        if self.busy:
+            self._show_window()
+            if not messagebox.askyesno(APP_NAME, "Právě probíhá skenování nebo načítání katalogu.\n\n"
+                                       "Opravdu ukončit? Rozpracovaná aktualizace se neuloží, "
+                                       "katalog zůstane beze změny.", icon="warning", default="no"):
+                return
+        self._on_close()
+
     def _on_close(self):
         self._ql_close()
         shutil.rmtree(getattr(self, "_pv_dir", ""), ignore_errors=True)
@@ -2042,7 +2124,7 @@ class App(tk.Tk, _DnDBase):
         rel = self._upd
         if not rel or self._installing:
             return
-        if self.busy:                                  # nerušit skenování – zeptá se, až doběhne
+        if self.busy or not self._window_visible():    # nerušit skenování / počkat na okno
             self._offer_pending = True
             return
         self._offer_pending = False
@@ -2257,6 +2339,8 @@ class App(tk.Tk, _DnDBase):
             self._set_busy(False)
             self.scan_info.set("Katalog se neuložil, původní zůstal beze změny.")
             self.status.set("Katalog se neuložil.")
+            if not self._window_visible():
+                notify(APP_NAME, "Aktualizace katalogu se nepovedla, katalog zůstal beze změny.")
             if self._silent:
                 reason = getattr(self, "_silent_reason", None) or m[1].split("\n\n")[0].replace("\n", " ")
                 self._silent_reason = None
@@ -2274,11 +2358,15 @@ class App(tk.Tk, _DnDBase):
             self.scan_info.set(info)
             self._set_catalog(cat)
             self.status.set(info)
+            if not self._window_visible():
+                notify(APP_NAME, f"Katalog {os.path.basename(cat.path)} je aktualizovaný: "
+                                 f"{fmt_n(len(cat.entries))} položek"
+                                 + (f", nepřečteno {fmt_n(n_failed)} složek" if n_failed else "") + ".")
             if self._silent:
                 note = f" (nepřečteno {fmt_n(n_failed)} složek – seznam vedle katalogu)" if n_failed else ""
                 self._silent_end(f"Automaticky aktualizováno v {time.strftime('%H:%M')}: "
                                  f"{fmt_n(len(cat.entries))} položek{note}", ok=True)
-            elif n_failed or n_items:
+            elif (n_failed or n_items) and self._window_visible():
                 what = []
                 if n_failed:
                     what.append(f"{fmt_n(n_failed)} složek")
