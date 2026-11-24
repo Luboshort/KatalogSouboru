@@ -1,5 +1,10 @@
 # Historie verzí
 
+## 1.23
+- Ve spodní liště volba „Automaticky updatovat otevřený katalog“ (výchozí vypnuto, nastavení se pamatuje, zapnutí chráněné heslem).
+- Když je zapnutá a aplikace se spustí mezi 8:00 a 9:00, otevřený katalog se sám aktualizuje bez dotazů, včetně zálohy do „Katalog archive“ – nejvýš jednou denně.
+- Bez dotazů znamená i bez rizika: při nedostupném disku nebo podezřelém úbytku položek (víc než 20 %) se katalog neuloží a důvod je ve spodní liště a v protokolu.
+
 ## 1.22
 - Oprava: rámeček tlačítek záložek se vždy vykreslí celý (ztmavená plocha a linka do něj už nezasahují).
 

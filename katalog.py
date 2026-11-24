@@ -31,7 +31,7 @@ import threading
 import subprocess
 import unicodedata
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, filedialog, messagebox, simpledialog
 import tkinter.font as tkfont
 
 # Drag & drop (volitelné – knihovna tkinterdnd2 leží vedle tohoto souboru)
@@ -43,7 +43,7 @@ except Exception:
     _DnDBase = object
 
 APP_NAME = "Katalog souborů"
-APP_VERSION = "1.22"
+APP_VERSION = "1.23"
 APP_TITLE = f"{APP_NAME} {APP_VERSION}"
 EXT = ".katalog"
 ARCHIVE_DIR = "Katalog archive"
@@ -141,6 +141,10 @@ def read_count(path):
     except Exception:
         return None
 
+
+# Automatická aktualizace otevřeného katalogu při spuštění mezi 8 a 9 h (zapíná se heslem)
+AUTO_RESCAN_HOURS = (8, 9)
+AUTO_RESCAN_PW = "f1a4139fc8a9c5176bf1c591b1a5c6b18512829cbe992dabcc2f687ab3dd6a00"   # SHA-256 hesla (heslo není v kódu čitelně)
 
 GROWTH_DAYS = 30            # přírůstek se počítá z posledních 30 dní
 
@@ -648,6 +652,9 @@ class App(tk.Tk, _DnDBase):
         self.cancel_ev = threading.Event()
         self.busy = False
         self.settings = load_settings()
+        h = time.localtime().tm_hour
+        self._auto_window = AUTO_RESCAN_HOURS[0] <= h < AUTO_RESCAN_HOURS[1]   # spuštěno mezi 8 a 9 h
+        self._silent = False                     # tichá aktualizace – na nic se neptá
 
         self._build_ui()
         if self.dnd:
@@ -840,6 +847,9 @@ class App(tk.Tk, _DnDBase):
         ttk.Separator(self).pack(side="bottom", fill="x", before=self.nb)   # čára nad lištou
         ttk.Button(bar, text="Zkontrolovat aktualizace",
                    command=lambda: self.check_updates(manual=True)).pack(side="right")
+        self.var_auto_rescan = tk.BooleanVar(value=bool(self.settings.get("auto_rescan", False)))
+        ttk.Checkbutton(bar, text="Automaticky updatovat otevřený katalog", variable=self.var_auto_rescan,
+                        command=self._toggle_auto_rescan).pack(side="right", padx=(10, 12))
         ttk.Label(bar, text=f"verze {APP_VERSION}", foreground="gray").pack(side="right", padx=(10, 8))
         ttk.Label(bar, textvariable=self.status, anchor="w").pack(side="left", fill="x", expand=True)
 
@@ -1130,6 +1140,9 @@ class App(tk.Tk, _DnDBase):
                 if not os.access(arch, os.W_OK):
                     raise PermissionError("chybí oprávnění k zápisu")
             except OSError as ex:
+                if self._silent:
+                    self._silent_end(f"Automatická aktualizace neproběhla – nejde vytvořit zálohu ve složce {arch}: {ex}")
+                    return
                 messagebox.showerror(APP_NAME, f"Nejde vytvořit zálohu ve složce\n{arch}\n\n{ex}\n\n"
                                      "Aktualizace se proto nespustila, katalog zůstal beze změny.")
                 return
@@ -1213,6 +1226,63 @@ class App(tk.Tk, _DnDBase):
                                         f"Podrobnosti: {LOG_FILE}"))
 
         threading.Thread(target=worker, daemon=True).start()
+
+    # ---------- automatická aktualizace otevřeného katalogu (8–9 h, zapnutí heslem)
+    def _toggle_auto_rescan(self):
+        on = self.var_auto_rescan.get()
+        if on:
+            pw = simpledialog.askstring(APP_NAME, "Zabezpečená funkce, zadejte heslo:", show="*", parent=self)
+            if pw is None or hashlib.sha256(pw.encode("utf-8")).hexdigest() != AUTO_RESCAN_PW:
+                self.var_auto_rescan.set(False)
+                if pw is not None:
+                    messagebox.showerror(APP_NAME, "Nesprávné heslo.")
+                return
+            self.status.set(f"Zapnuto: při spuštění aplikace mezi {AUTO_RESCAN_HOURS[0]}:00 a "
+                            f"{AUTO_RESCAN_HOURS[1]}:00 se otevřený katalog sám aktualizuje.")
+        else:
+            self.status.set("Automatická aktualizace katalogu vypnuta.")
+        self.settings["auto_rescan"] = on
+        save_settings(self.settings)
+
+    def _maybe_auto_rescan(self):
+        """Po načtení katalogu: spuštěno mezi 8 a 9 h + zapnuto → aktualizovat bez dotazů (jednou denně)."""
+        if not self._auto_window:
+            return
+        self._auto_window = False                  # jen jednou za spuštění
+        if not self.settings.get("auto_rescan"):
+            return
+        cat = self.catalog
+        today = time.strftime("%Y-%m-%d")
+        if not cat or not cat.path or is_archived(cat.path):
+            return
+        if self.settings.get("auto_rescan_date") == today:
+            self.status.set("Automatická aktualizace katalogu už dnes proběhla.")
+            return
+        missing = [r for r in cat.roots if not os.path.isdir(r)]
+        if missing:
+            msg = "Automatická aktualizace neproběhla – nedostupné složky: " + "; ".join(missing)
+            self.status.set(msg)
+            log_error(msg)
+            return
+        log_error(f"Automatická aktualizace katalogu {cat.path}")
+        self.folder_list.delete(0, "end")
+        for r in cat.roots:
+            self.folder_list.insert("end", r)
+        opts = cat.options or {}
+        self.var_hidden.set(opts.get("skip_hidden", True))
+        self.var_packages.set(opts.get("skip_packages", True))
+        self.nb.select(self.tab_scan)
+        self._silent = True
+        self.start_scan(save_path=cat.path)
+
+    def _silent_end(self, msg, ok=False):
+        """Konec tiché aktualizace: jen zpráva ve stavu a v protokolu, žádné okno."""
+        self._silent = False
+        self.status.set(msg)
+        log_error(("Automatická aktualizace: " if not msg.startswith("Automatick") else "") + msg)
+        if ok:
+            self.settings["auto_rescan_date"] = time.strftime("%Y-%m-%d")
+            save_settings(self.settings)
 
     def rescan(self):
         if not self.catalog:
@@ -2169,6 +2239,11 @@ class App(tk.Tk, _DnDBase):
             _, ev, box, n_old, n_new, n_failed = m
             try:
                 pct = 100 - round(100 * n_new / n_old)
+                if self._silent:                   # bez dotazu: podezřelý úbytek → radši neuložit
+                    box["ok"] = False
+                    self._silent_reason = (f"nový katalog by měl o {pct} % méně položek "
+                                           f"({fmt_n(n_new)} místo {fmt_n(n_old)}) – neuloženo, zkontroluj disk")
+                    return
                 txt = (f"Nový katalog má {fmt_n(n_new)} položek, původní měl {fmt_n(n_old)} "
                        f"(o {pct} % méně).\n\n")
                 if n_failed:
@@ -2182,7 +2257,12 @@ class App(tk.Tk, _DnDBase):
             self._set_busy(False)
             self.scan_info.set("Katalog se neuložil, původní zůstal beze změny.")
             self.status.set("Katalog se neuložil.")
-            messagebox.showwarning(APP_NAME, m[1])
+            if self._silent:
+                reason = getattr(self, "_silent_reason", None) or m[1].split("\n\n")[0].replace("\n", " ")
+                self._silent_reason = None
+                self._silent_end(f"Automatická aktualizace neproběhla: {reason}")
+            else:
+                messagebox.showwarning(APP_NAME, m[1])
         elif kind == "scan_done":
             self._set_busy(False)
             _, cat, n_failed, n_items, report = m
@@ -2194,7 +2274,11 @@ class App(tk.Tk, _DnDBase):
             self.scan_info.set(info)
             self._set_catalog(cat)
             self.status.set(info)
-            if n_failed or n_items:
+            if self._silent:
+                note = f" (nepřečteno {fmt_n(n_failed)} složek – seznam vedle katalogu)" if n_failed else ""
+                self._silent_end(f"Automaticky aktualizováno v {time.strftime('%H:%M')}: "
+                                 f"{fmt_n(len(cat.entries))} položek{note}", ok=True)
+            elif n_failed or n_items:
                 what = []
                 if n_failed:
                     what.append(f"{fmt_n(n_failed)} složek")
@@ -2223,6 +2307,7 @@ class App(tk.Tk, _DnDBase):
             self._set_busy(False)
             self._load_done()
             self._set_catalog(m[1])
+            self.after(500, self._maybe_auto_rescan)
         elif kind == "work_done":
             _, gen, result, on_done = m
             if gen == self._work_gen:              # starší výsledek (mezitím nové hledání) zahodit
@@ -2248,11 +2333,16 @@ class App(tk.Tk, _DnDBase):
         elif kind == "cancelled":
             self._set_busy(False)
             self.scan_info.set("Skenování zrušeno, katalog zůstal beze změny.")
+            if self._silent:
+                self._silent_end("Automatická aktualizace zrušena, katalog zůstal beze změny.")
         elif kind == "error":
             self._set_busy(False)
             self._load_done()
             self.status.set("Chyba.")
-            messagebox.showerror(APP_NAME, m[1])
+            if self._silent:
+                self._silent_end("Automatická aktualizace selhala: " + m[1].split("\n\n")[0].replace("\n", " "))
+            else:
+                messagebox.showerror(APP_NAME, m[1])
 
 
 
