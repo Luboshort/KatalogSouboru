@@ -22,7 +22,7 @@ ji často nejde ani povolit. Soubor stažený z Terminálu tuto značku nedostan
 - Výsledky jako seznam (název, upraveno, vytvořeno, velikost, cesta) s řazením, nebo jako strom složek.
 - Náhled souboru mezerníkem, dvojklik = zobrazit ve Finderu.
 - Aktualizace katalogu se zálohou předchozí verze do složky `Katalog archive`.
-- Volitelně (chráněno heslem): automatická aktualizace otevřeného katalogu při spuštění mezi 8 a 9 h.
+- Volitelně (chráněno heslem): automatická aktualizace otevřeného katalogu jednou denně mezi 8 a 9 h, když aplikace běží (i se zavřeným oknem).
 - Zvládá katalogy s miliony položek.
 - Po zavření okna běží dál na pozadí (okno znovu: ikona v Docku nebo Soubor › Nové okno, ukončení ⌘Q).
 - Sama upozorní, když je na GitHubu nová verze.

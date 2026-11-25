@@ -1,5 +1,10 @@
 # Historie verzí
 
+## 1.25
+- Oprava: automatická aktualizace katalogu proběhne i tehdy, když aplikace běží už od dřívějška (třeba se zavřeným oknem přes noc). Mezi 8:00 a 9:00 se kontroluje každou minutu, nejen při spuštění.
+- Když je disk nedostupný (síť po probuzení Macu ještě nenaběhla), zkusí to znovu za 5 minut, nejpozději do 9:00.
+- macOS aplikaci na pozadí neuspává (App Nap), takže časovače i skenování běží i se zavřeným oknem.
+
 ## 1.24
 - Zavřením okna aplikace neskončí – běží dál na pozadí (ikona zůstává v Docku). Okno znovu otevře kliknutí na ikonu v Docku nebo menu Soubor › Nové okno (⌘N). Úplně ukončit: ⌘Q.
 - Když aktualizace katalogu doběhne při zavřeném okně, macOS ukáže upozornění.

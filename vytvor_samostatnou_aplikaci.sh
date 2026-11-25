@@ -56,6 +56,8 @@ plutil -replace CFBundleName -string "$NAME" "$PL"
 plutil -replace CFBundleShortVersionString -string "$VERSION" "$PL"
 plutil -replace CFBundleVersion -string "$VERSION" "$PL"
 plutil -replace NSHighResolutionCapable -bool YES "$PL"
+# běh na pozadí se zavřeným oknem: macOS nesmí aplikaci uspat (App Nap) – jinak stojí časovače i skenování
+plutil -replace NSAppSleepDisabled -bool YES "$PL"
 plutil -replace CFBundleDocumentTypes -json '[
   {"CFBundleTypeName":"Složka","CFBundleTypeRole":"Viewer","LSItemContentTypes":["public.folder"]},
   {"CFBundleTypeName":"Katalog souborů","CFBundleTypeRole":"Viewer","CFBundleTypeExtensions":["katalog"]}

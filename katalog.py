@@ -43,7 +43,7 @@ except Exception:
     _DnDBase = object
 
 APP_NAME = "Katalog souborů"
-APP_VERSION = "1.24"
+APP_VERSION = "1.25"
 APP_TITLE = f"{APP_NAME} {APP_VERSION}"
 EXT = ".katalog"
 ARCHIVE_DIR = "Katalog archive"
@@ -663,8 +663,7 @@ class App(tk.Tk, _DnDBase):
         self.cancel_ev = threading.Event()
         self.busy = False
         self.settings = load_settings()
-        h = time.localtime().tm_hour
-        self._auto_window = AUTO_RESCAN_HOURS[0] <= h < AUTO_RESCAN_HOURS[1]   # spuštěno mezi 8 a 9 h
+        self._auto_last_try = 0.0                # kdy naposledy proběhl pokus o automatickou aktualizaci
         self._silent = False                     # tichá aktualizace – na nic se neptá
 
         self._build_ui()
@@ -673,6 +672,7 @@ class App(tk.Tk, _DnDBase):
             self.after(300, lambda: self._register_drop(self))
         self.after(100, self._poll)
         self.after(4000, self._update_tick)
+        self.after(60_000, self._auto_tick)       # automatická aktualizace katalogu 8–9 h
         self._after_update_notice()
         self._is_mac = self.tk.call("tk", "windowingsystem") == "aqua"
         self.protocol("WM_DELETE_WINDOW", self._close_window)
@@ -1248,30 +1248,43 @@ class App(tk.Tk, _DnDBase):
                 if pw is not None:
                     messagebox.showerror(APP_NAME, "Nesprávné heslo.")
                 return
-            self.status.set(f"Zapnuto: při spuštění aplikace mezi {AUTO_RESCAN_HOURS[0]}:00 a "
-                            f"{AUTO_RESCAN_HOURS[1]}:00 se otevřený katalog sám aktualizuje.")
+            self.status.set(f"Zapnuto: mezi {AUTO_RESCAN_HOURS[0]}:00 a {AUTO_RESCAN_HOURS[1]}:00 se otevřený "
+                            "katalog jednou denně sám aktualizuje (i při zavřeném okně).")
         else:
             self.status.set("Automatická aktualizace katalogu vypnuta.")
         self.settings["auto_rescan"] = on
         save_settings(self.settings)
 
+    def _auto_tick(self):
+        """Každou minutu (i při zavřeném okně a po probuzení Macu): je 8–9 h → zkusit automatickou aktualizaci."""
+        try:
+            self._maybe_auto_rescan()
+        except Exception:
+            log_error("auto_tick:\n" + traceback.format_exc())
+        self.after(60_000, self._auto_tick)
+
     def _maybe_auto_rescan(self):
-        """Po načtení katalogu: spuštěno mezi 8 a 9 h + zapnuto → aktualizovat bez dotazů (jednou denně)."""
-        if not self._auto_window:
+        """Mezi 8 a 9 h + zapnuto + otevřený katalog → aktualizovat bez dotazů, nejvýš jednou denně.
+        Kontroluje se po otevření katalogu a pak každou minutu, dokud aplikace běží (i se zavřeným oknem).
+        Nedostupný disk (např. síť po probuzení ještě nenaběhla) → další pokus za 5 minut, nejpozději do 9 h."""
+        h = time.localtime().tm_hour
+        if not (AUTO_RESCAN_HOURS[0] <= h < AUTO_RESCAN_HOURS[1]):
             return
-        self._auto_window = False                  # jen jednou za spuštění
-        if not self.settings.get("auto_rescan"):
+        if not self.settings.get("auto_rescan") or self.busy or self._silent:
             return
         cat = self.catalog
         today = time.strftime("%Y-%m-%d")
         if not cat or not cat.path or is_archived(cat.path):
             return
         if self.settings.get("auto_rescan_date") == today:
-            self.status.set("Automatická aktualizace katalogu už dnes proběhla.")
             return
+        if time.time() - self._auto_last_try < 300:
+            return
+        self._auto_last_try = time.time()
         missing = [r for r in cat.roots if not os.path.isdir(r)]
         if missing:
-            msg = "Automatická aktualizace neproběhla – nedostupné složky: " + "; ".join(missing)
+            msg = ("Automatická aktualizace zatím neproběhla – nedostupné složky: " + "; ".join(missing)
+                   + f". Další pokus za 5 minut (do {AUTO_RESCAN_HOURS[1]}:00).")
             self.status.set(msg)
             log_error(msg)
             return
