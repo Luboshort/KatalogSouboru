@@ -1,5 +1,8 @@
 # Historie verzí
 
+## 1.26
+- Kliknutí na ikonu v Docku už po zavření okna neotevírá okno. Okno se znovu otevře jen v menu Soubor › Nové okno (⌘N).
+
 ## 1.25
 - Oprava: automatická aktualizace katalogu proběhne i tehdy, když aplikace běží už od dřívějška (třeba se zavřeným oknem přes noc). Mezi 8:00 a 9:00 se kontroluje každou minutu, nejen při spuštění.
 - Když je disk nedostupný (síť po probuzení Macu ještě nenaběhla), zkusí to znovu za 5 minut, nejpozději do 9:00.

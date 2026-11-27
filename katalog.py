@@ -43,7 +43,7 @@ except Exception:
     _DnDBase = object
 
 APP_NAME = "Katalog souborů"
-APP_VERSION = "1.25"
+APP_VERSION = "1.26"
 APP_TITLE = f"{APP_NAME} {APP_VERSION}"
 EXT = ".katalog"
 ARCHIVE_DIR = "Katalog archive"
@@ -2034,7 +2034,7 @@ class App(tk.Tk, _DnDBase):
             self.bind_all(f"<{cmd}-{key}>", lambda e, f=fn: (f(), "break")[1])
         if self._is_mac:
             try:
-                self.createcommand("::tk::mac::ReopenApplication", self._show_window)   # klik na ikonu v Docku
+                self.createcommand("::tk::mac::ReopenApplication", lambda *a: None)    # klik na ikonu v Docku okno neotevírá – jen Soubor › Nové okno
                 self.createcommand("::tk::mac::Quit", self._quit)                       # Cmd+Q
             except tk.TclError:
                 pass
@@ -2053,7 +2053,7 @@ class App(tk.Tk, _DnDBase):
         self._ql_close()
         self.withdraw()
         if self.busy:
-            notify(APP_NAME, "Okno je zavřené, skenování běží dál. Okno ukážeš kliknutím na ikonu v Docku.")
+            notify(APP_NAME, "Okno je zavřené, skenování běží dál. Okno ukážeš v menu Soubor › Nové okno.")
 
     def _show_window(self, *_):
         self.deiconify()
